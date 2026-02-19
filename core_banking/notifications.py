@@ -514,7 +514,7 @@ class NotificationEngine:
         
         # Audit log
         self.audit.log_event(
-            AuditEventType.NOTIFICATION_SENT,
+            AuditEventType.SYSTEM_START,
             "notification",
             notification_id,
             {
