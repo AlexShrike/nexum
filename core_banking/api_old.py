@@ -11,6 +11,7 @@ from datetime import datetime, timezone, date, timedelta
 from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
@@ -22,6 +23,7 @@ import time
 
 from .currency import Money, Currency
 from .storage import InMemoryStorage, SQLiteStorage
+from .async_storage import AsyncStorageInterface, create_async_storage
 from .audit import AuditTrail, AuditEventType
 from .ledger import GeneralLedger, AccountType
 from .accounts import AccountManager, ProductType, AccountState
@@ -483,12 +485,17 @@ from .notifications import NotificationEngine, NotificationChannel, Notification
 class BankingSystem:
     """Core banking system with all components initialized"""
     
-    def __init__(self, use_sqlite: bool = True):
+    def __init__(self, use_sqlite: bool = True, async_storage: AsyncStorageInterface = None):
         # Initialize storage
-        if use_sqlite:
+        if async_storage:
+            self.storage = async_storage
+            self.is_async = True
+        elif use_sqlite:
             self.storage = SQLiteStorage("core_banking.db")
+            self.is_async = False
         else:
             self.storage = InMemoryStorage()
+            self.is_async = False
         
         # Initialize core components
         self.audit_trail = AuditTrail(self.storage)
@@ -529,17 +536,50 @@ class BankingSystem:
         self.notification_engine = NotificationEngine(self.storage, self.audit_trail)
 
 
-# Global banking system instance
-banking_system = BankingSystem(use_sqlite=True)
+# Global banking system instance - will be initialized in lifespan
+banking_system = None
+async_storage_instance = None
 
 
-# Create FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan manager for async storage pool management"""
+    global banking_system, async_storage_instance
+    
+    # Startup: initialize async storage if configured
+    try:
+        async_storage_instance = create_async_storage()
+        
+        # Initialize the storage if it has an initialize method (e.g., PostgreSQL pool)
+        if hasattr(async_storage_instance, 'initialize'):
+            await async_storage_instance.initialize()
+        
+        # Create banking system with async storage
+        banking_system = BankingSystem(async_storage=async_storage_instance)
+        
+        print("✅ Banking system initialized with async storage")
+        
+    except Exception as e:
+        print(f"⚠️  Falling back to sync storage due to: {e}")
+        # Fall back to sync storage
+        banking_system = BankingSystem(use_sqlite=True)
+    
+    yield
+    
+    # Shutdown: close async storage pool
+    if async_storage_instance and hasattr(async_storage_instance, 'close'):
+        await async_storage_instance.close()
+        print("✅ Async storage pool closed")
+
+
+# Create FastAPI app with lifespan
 app = FastAPI(
     title="Core Banking System API",
     description="Production-grade core banking system with double-entry bookkeeping",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -557,6 +597,8 @@ app.middleware("http")(RateLimiter(requests_per_minute=60))
 
 # Dependency to get banking system
 def get_banking_system() -> BankingSystem:
+    if banking_system is None:
+        raise HTTPException(status_code=503, detail="Banking system not initialized")
     return banking_system
 
 
