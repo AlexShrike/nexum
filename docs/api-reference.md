@@ -1,6 +1,6 @@
 # API Reference
 
-Nexum provides 112 REST API endpoints organized by functional modules. All endpoints support JSON request/response format and follow REST conventions.
+Nexum provides 120 REST API endpoints organized by functional modules. All endpoints support JSON request/response format and follow REST conventions.
 
 ## Base URL
 
@@ -9,10 +9,91 @@ Nexum provides 112 REST API endpoints organized by functional modules. All endpo
 
 ## Authentication
 
-Most endpoints require authentication via the RBAC system. Include authentication headers:
+Nexum uses JWT (JSON Web Token) authentication with bearer tokens. All protected endpoints require a valid JWT token in the Authorization header.
+
+### JWT Authentication Flow
+
+1. **Login**: POST to `/auth/login` with username/password
+2. **Receive Token**: Get JWT token and session information  
+3. **Use Token**: Include token in Authorization header for subsequent requests
+4. **Token Expiry**: Tokens expire after 24 hours (configurable via `NEXUM_JWT_EXPIRY_HOURS`)
+
+### Authentication Headers
 
 ```bash
-Authorization: Bearer <session_token>
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Rate Limiting
+
+API requests are rate limited to 60 requests per minute per IP address. Rate limit headers are included in responses:
+
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 45  
+X-RateLimit-Reset: 1735603260
+```
+
+When rate limit is exceeded, API returns HTTP 429 with:
+
+```json
+{
+  "detail": "Rate limit exceeded",
+  "retry_after": 60
+}
+```
+
+## Authentication Endpoints (3 endpoints)
+
+### POST /auth/login
+Authenticate user and receive JWT token.
+
+**Request:**
+```json
+{
+  "username": "admin",
+  "password": "secure_password_123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer", 
+  "session_id": "sess_abc123def456",
+  "expires_at": "2026-02-20T15:32:00.000000",
+  "message": "Login successful"
+}
+```
+
+**Error Responses:**
+- **401 Unauthorized**: Invalid username/password
+- **423 Locked**: Account locked due to failed attempts
+
+### POST /auth/logout
+Logout user and invalidate session.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response (200):**
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+### POST /auth/setup
+Create the first admin user (only works if no users exist).
+
+**Request:**
+```json
+{
+  "username": "admin",
+  "password": "secure_password_123", 
+  "email": "admin@example.com",
+  "full_name": "Administrator"
+}
 ```
 
 ## Common Data Types
@@ -34,6 +115,29 @@ Authorization: Bearer <session_token>
   "state": "CA",
   "postal_code": "12345",
   "country": "US"
+}
+```
+
+### Pagination
+
+List endpoints support pagination with query parameters:
+
+- `skip`: Number of records to skip (default: 0)  
+- `limit`: Maximum number of records to return (default: 50, max: 1000)
+
+**Example Request:**
+```
+GET /customers?skip=0&limit=20
+```
+
+**Paginated Response:**
+```json
+{
+  "items": [...],
+  "total": 156,
+  "skip": 0,
+  "limit": 20,
+  "has_more": true
 }
 ```
 
@@ -679,6 +783,91 @@ X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 999
 X-RateLimit-Reset: 1640995200
 ```
+
+## Kafka Event Streaming (6 endpoints)
+
+### GET /kafka/status
+Get Kafka integration status and health.
+
+**Response (200):**
+```json
+{
+  "enabled": true,
+  "connected": true,
+  "bootstrap_servers": "localhost:9092",
+  "producer_status": "healthy",
+  "consumer_status": "healthy",
+  "topics": {
+    "nexum.transactions.created": {"partitions": 3, "replicas": 1},
+    "nexum.accounts.created": {"partitions": 3, "replicas": 1},
+    "nexum.customers.updated": {"partitions": 3, "replicas": 1},
+    "nexum.loans.originated": {"partitions": 3, "replicas": 1}
+  }
+}
+```
+
+### GET /kafka/events
+List recent events published to Kafka.
+
+**Query Parameters:**
+- `topic`: Filter by topic name (optional)
+- `limit`: Maximum events to return (default: 50)
+- `since`: ISO timestamp to filter events after (optional)
+
+**Response (200):**
+```json
+{
+  "events": [
+    {
+      "id": "evt_abc123",
+      "topic": "nexum.transactions.created",
+      "timestamp": "2026-02-19T15:32:00.000000Z",
+      "event_type": "TransactionCreated", 
+      "data": {
+        "transaction_id": "txn_def456",
+        "account_id": "acc_xyz789",
+        "amount": "1000.00",
+        "currency": "USD"
+      }
+    }
+  ],
+  "total": 1,
+  "has_more": false
+}
+```
+
+### POST /kafka/events/replay
+Replay events to Kafka (admin only).
+
+**Request:**
+```json
+{
+  "event_ids": ["evt_abc123", "evt_def456"],
+  "target_topic": "nexum.events.replay"
+}
+```
+
+### GET /kafka/consumers
+List active consumer groups and their status.
+
+### POST /kafka/consumers/{group}/reset
+Reset consumer group offset (admin only).
+
+### DELETE /kafka/events/{event_id}
+Delete a specific event from the event store (admin only).
+
+## Advanced Features
+
+### Idempotency 
+
+All mutation endpoints support idempotency keys to prevent duplicate operations:
+
+**Header:**
+```
+Idempotency-Key: unique-operation-key-123
+```
+
+If the same idempotency key is used within 24 hours, the original response is returned instead of processing a new operation.
 
 ## Pagination
 

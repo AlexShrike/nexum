@@ -34,10 +34,11 @@ Granular permissions controlling access to specific operations:
 
 ### Sessions
 Secure session management with:
-- JWT tokens with expiration
+- JWT tokens with configurable expiration (default: 24 hours)
 - Session validation and renewal
-- Concurrent session limits
+- Concurrent session limits  
 - Automatic timeout handling
+- Bearer token authentication for API access
 
 ## Core Classes
 
@@ -380,12 +381,32 @@ class UserManager:
         return user
     
     def hash_password(self, password: str, salt: str) -> str:
-        """Hash password with salt using secure algorithm"""
-        return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
+        """Hash password with salt using scrypt (more secure than SHA-256)"""
+        # Use scrypt for stronger password hashing with memory-hard properties
+        return hashlib.scrypt(
+            password.encode(), 
+            salt=salt.encode(), 
+            n=16384, r=8, p=1  # Standard scrypt parameters for strong security
+        ).hex()
+    
+    def hash_password_legacy(self, password: str, salt: str) -> str:
+        """Legacy SHA-256 password hashing for backward compatibility"""
+        return hashlib.sha256((password + salt).encode()).hexdigest()
     
     def verify_password(self, password: str, hash: str, salt: str) -> bool:
-        """Verify password against stored hash"""
-        return self.hash_password(password, salt) == hash
+        """Verify password against stored hash with legacy support"""
+        # Try new scrypt hashing first
+        expected_hash_new = self.hash_password(password, salt)
+        if hash == expected_hash_new:
+            return True
+            
+        # Fall back to legacy SHA-256 for existing passwords
+        expected_hash_legacy = self.hash_password_legacy(password, salt)
+        if hash == expected_hash_legacy:
+            # Consider re-hashing with scrypt for security upgrade
+            return True
+            
+        return False
 ```
 
 ### Password Policy
@@ -668,12 +689,14 @@ Handle user sessions and JWT tokens:
 from core_banking.rbac import SessionManager
 import jwt
 import secrets
+from datetime import datetime, timezone, timedelta
 
 class SessionManager:
-    def __init__(self, storage: StorageInterface, secret_key: str):
+    def __init__(self, storage: StorageInterface, config):
         self.storage = storage
-        self.secret_key = secret_key
-        self.token_expiry_hours = 8
+        self.jwt_secret = config.jwt_secret
+        self.jwt_expiry_hours = config.jwt_expiry_hours
+        self.jwt_algorithm = config.jwt_algorithm  # Default: "HS256"
     
     def create_session(
         self,
@@ -694,15 +717,20 @@ class SessionManager:
             self.end_session(oldest_session.id, "concurrent_limit_exceeded")
         
         # Generate session token
+        # Create JWT token
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(hours=self.jwt_expiry_hours)
+        
         token_payload = {
-            "user_id": user.id,
-            "username": user.username,
-            "roles": user.roles,
-            "iat": datetime.now(timezone.utc).timestamp(),
-            "exp": (datetime.now(timezone.utc) + timedelta(hours=self.token_expiry_hours)).timestamp()
+            "sub": user.id,                     # Subject (user ID) 
+            "username": user.username,          # Username
+            "roles": user.roles,                # User roles for authorization
+            "session_id": session_id,           # Session identifier
+            "iat": int(now.timestamp()),        # Issued at
+            "exp": int(expires_at.timestamp())  # Expiration time
         }
         
-        session_token = jwt.encode(token_payload, self.secret_key, algorithm="HS256")
+        session_token = jwt.encode(token_payload, self.jwt_secret, algorithm=self.jwt_algorithm)
         
         # Create session record
         session = Session(
@@ -861,16 +889,141 @@ def require_permission(permission: str):
         return wrapper
     return decorator
 
-# Example usage in API endpoints
+## Permission Enforcement on API Endpoints
+
+All API endpoints are protected using JWT authentication middleware and role-based permission checks:
+
+### Authentication Middleware
+
+```python
+from fastapi import HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+
+security = HTTPBearer()
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Extract and validate JWT token from Authorization header"""
+    token = credentials.credentials
+    
+    try:
+        payload = jwt.decode(token, config.jwt_secret, algorithms=[config.jwt_algorithm])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Validate user exists and is active
+        rbac_manager = get_rbac_manager()
+        user = rbac_manager.get_user(user_id)
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="User inactive")
+        
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+```
+
+### Permission Decorators
+
+```python
+from functools import wraps
+from fastapi import HTTPException
+
+def require_permission(permission: str):
+    """Decorator to require specific permission for endpoint access"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract current user from dependency injection
+            current_user = kwargs.get('current_user')
+            
+            rbac_manager = get_rbac_manager()
+            if not rbac_manager.user_has_permission(current_user, permission):
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Permission required: {permission}"
+                )
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+```
+
+### Protected Endpoint Examples
+
+```python
+# Customer management endpoints
 @app.get("/customers/{customer_id}")
-@require_permission("customer.read")
+@require_permission("VIEW_CUSTOMER")
 async def get_customer(
     customer_id: str,
-    current_user: User = Depends(),
-    current_session: Session = Depends()
+    current_user: User = Depends(get_current_user)
 ):
-    # Endpoint logic here
+    """Get customer details - requires VIEW_CUSTOMER permission"""
     pass
+
+@app.post("/customers")
+@require_permission("CREATE_CUSTOMER") 
+async def create_customer(
+    customer_data: CustomerCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create new customer - requires CREATE_CUSTOMER permission"""
+    pass
+
+# Transaction endpoints
+@app.post("/transactions/deposit")
+@require_permission("CREATE_TRANSACTION")
+async def deposit_transaction(
+    deposit_data: DepositRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Process deposit - requires CREATE_TRANSACTION permission"""
+    pass
+
+@app.post("/transactions/transfer")
+@require_permission("CREATE_TRANSACTION")
+async def transfer_transaction(
+    transfer_data: TransferRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Process transfer - requires CREATE_TRANSACTION permission"""
+    pass
+
+# Administrative endpoints
+@app.get("/admin/users")
+@require_permission("MANAGE_USERS")
+async def list_users(
+    current_user: User = Depends(get_current_user)
+):
+    """List all users - requires MANAGE_USERS permission"""
+    pass
+
+@app.post("/admin/users/{user_id}/roles")
+@require_permission("ASSIGN_ROLES")
+async def assign_role(
+    user_id: str,
+    role_data: RoleAssignment,
+    current_user: User = Depends(get_current_user)
+):
+    """Assign role to user - requires ASSIGN_ROLES permission"""
+    pass
+```
+
+### Role-Based Access Control Matrix
+
+| Endpoint | TELLER | OFFICER | MANAGER | ADMIN | AUDITOR |
+|----------|---------|---------|---------|-------|---------|
+| GET /customers/{id} | ✓ | ✓ | ✓ | ✓ | ✓ |
+| POST /customers | ✗ | ✓ | ✓ | ✓ | ✗ |
+| POST /transactions/deposit | ✓ | ✓ | ✓ | ✓ | ✗ |
+| POST /transactions/transfer | ✗ | ✓ | ✓ | ✓ | ✗ |
+| POST /loans | ✗ | ✓ | ✓ | ✓ | ✗ |
+| PUT /loans/{id}/approve | ✗ | ✗ | ✓ | ✓ | ✗ |
+| GET /admin/users | ✗ | ✗ | ✗ | ✓ | ✓ |
+| POST /admin/users | ✗ | ✗ | ✗ | ✓ | ✗ |
 
 @app.post("/transactions/transfer")
 @require_permission("transaction.transfer")

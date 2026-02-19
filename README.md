@@ -3,13 +3,13 @@
 
 ![Nexum Logo](https://via.placeholder.com/150x75/4CAF50/FFFFFF?text=NEXUM)
 
-[![Tests Passing](https://img.shields.io/badge/tests-467%20passing-brightgreen)](./tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-514%20passing-brightgreen)](./tests/)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue)](https://python.org)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## What is Nexum?
 
-Nexum is an open-source, modular, API-first core banking system built for production environments. With 19 specialized modules, 112 REST endpoints, and 467 comprehensive tests, Nexum provides enterprise-grade financial infrastructure. Built on double-entry accounting principles with hash-chained audit trails, it ensures data integrity and regulatory compliance from day one.
+Nexum is an open-source, modular, API-first core banking system built for production environments. With 41+ specialized modules, 120 REST endpoints, and 514 comprehensive tests, Nexum provides enterprise-grade financial infrastructure with PostgreSQL support, JWT authentication, and Kafka integration. Built on double-entry accounting principles with hash-chained audit trails, it ensures data integrity and regulatory compliance from day one.
 
 ## ✨ Key Features
 
@@ -24,7 +24,38 @@ Nexum is an open-source, modular, API-first core banking system built for produc
 ⚙️ **Configurable workflow engine** (approval chains, SLA)  
 🔐 **Role-based access control** (8 roles, 30 permissions)  
 🏷️ **Custom fields** on any entity  
-🚀 **112 REST API endpoints** with OpenAPI/Swagger docs
+🚀 **120 REST API endpoints** with OpenAPI/Swagger docs  
+🏭 **Production-Ready Infrastructure** (PostgreSQL, JWT auth, Kafka events)  
+⚡ **ACID transactions** with migration system  
+📊 **Rate limiting** (60 req/min) and structured JSON logging
+
+## 🏭 Production Ready Features
+
+Nexum includes enterprise-grade infrastructure components for production deployment:
+
+**🔐 Security & Authentication**
+- JWT bearer token authentication with configurable expiry
+- scrypt password hashing (replacing legacy SHA-256)
+- Rate limiting middleware (60 requests/minute per IP)
+- Role-based access control with permission enforcement
+
+**💾 Storage & Data**
+- PostgreSQL backend with JSONB support and GIN indexes
+- ACID transaction support with atomic() context managers
+- Database migration system (8 migrations: v001-v008)
+- SQLite and in-memory storage for testing
+
+**📊 Configuration & Monitoring**
+- Environment-based configuration (NEXUM_* environment variables)
+- Structured JSON logging with configurable levels
+- Modular API architecture (15+ router modules)
+- Comprehensive pagination (skip/limit/total) on list endpoints
+
+**⚡ Event-Driven Architecture**
+- Kafka integration for real-time event streaming
+- Event hooks system for custom business logic
+- CloudEvents-compatible message format
+- Async event processing and publishing
 
 ## 🏗️ Architecture
 
@@ -64,6 +95,10 @@ cd nexum
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Configure database (optional - defaults to SQLite)
+export NEXUM_DATABASE_URL="postgresql://user:pass@localhost/nexum"
+export NEXUM_JWT_SECRET="your-secret-key-change-in-production"
 
 # Start the server
 python run.py
@@ -118,16 +153,22 @@ The API will be available at `http://localhost:8090` with interactive docs at `/
 | **Custom Fields** | 4 | Dynamic field management |
 | **Audit** | 2 | Audit trail queries, integrity checks |
 
-**Total: 112 REST endpoints**
+| **Kafka Events** | 6 | Event streaming, consumer management |  
+| **Authentication** | 3 | Login, logout, token refresh |
+
+**Total: 120 REST endpoints**
 
 ## 🛠️ Technology Stack
 
 - **Language**: Python 3.14+
 - **Web Framework**: FastAPI with automatic OpenAPI docs
-- **Precision**: Decimal arithmetic (never floats for money)
-- **Security**: SHA-256 hash-chained audit trail
-- **Storage**: Pluggable storage (SQLite, PostgreSQL ready)
-- **Testing**: Pytest with 467 comprehensive tests
+- **Database**: PostgreSQL with JSONB + SQLite + In-Memory
+- **Precision**: Decimal arithmetic (never floats for money)  
+- **Security**: JWT authentication + scrypt password hashing
+- **Auditing**: Hash-chained audit trail with integrity verification
+- **Events**: Kafka integration for real-time event streaming
+- **Configuration**: Environment-based config (NEXUS_* variables)
+- **Testing**: Pytest with 514 comprehensive tests
 - **API Documentation**: Auto-generated OpenAPI/Swagger
 
 ## 🧪 Testing
@@ -138,7 +179,7 @@ Run the complete test suite:
 python -m pytest tests/ -v
 ```
 
-**Test Coverage**: 467 tests across 16 test modules covering:
+**Test Coverage**: 514 tests across 16 test modules covering:
 - Unit tests for all financial calculations
 - Integration tests for complete workflows
 - Edge cases and error conditions
@@ -148,8 +189,13 @@ python -m pytest tests/ -v
 
 ```
 nexum/
-├── core_banking/           # Main package (19 modules)
-│   ├── api.py             # REST API endpoints (112 endpoints)
+├── core_banking/           # Main package (41+ modules)
+│   ├── api.py             # Main API server
+│   ├── api_modular/       # Modular API routers (15 modules)
+│   ├── config.py          # Environment-based configuration
+│   ├── migrations.py      # Database migration system
+│   ├── kafka_integration.py # Event streaming support
+│   ├── logging_config.py  # Structured JSON logging
 │   ├── ledger.py          # Double-entry bookkeeping
 │   ├── accounts.py        # Account management
 │   ├── customers.py       # Customer & KYC
@@ -166,8 +212,9 @@ nexum/
 │   ├── audit.py          # Audit trail
 │   ├── currency.py       # Multi-currency
 │   ├── storage.py        # Storage abstraction
-│   └── products.py       # Product configuration
-├── tests/                 # Test suite (467 tests)
+│   ├── products.py       # Product configuration
+│   └── event_hooks.py    # Kafka event hooks
+├── tests/                 # Test suite (514 tests)
 │   ├── test_ledger.py    # Ledger tests
 │   ├── test_accounts.py  # Account tests
 │   └── ...               # (16 test modules)
