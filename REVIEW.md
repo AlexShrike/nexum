@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Nexum is a **modular, API-first core banking system** built in Python. It currently comprises **21 modules, 17,157 lines of core code, 13,761 lines of tests (501 tests), and 120 REST endpoints**. The system covers the full spectrum of core banking operations: ledger, accounts, customers, transactions, interest, credit lines, loans, currency, compliance, audit, storage, products, collections, reporting, workflows, RBAC, custom fields, and Kafka-based event streaming.
+Nexum is a **modular, API-first core banking system** built in Python. It currently comprises **29 modules, 19,500+ lines of core code, 15,000+ lines of tests (642 tests), and 130+ REST endpoints**. The system covers the full spectrum of core banking operations: ledger, accounts, customers, transactions, interest, credit lines, loans, currency, compliance, audit, storage, products, collections, reporting, workflows, RBAC, custom fields, Kafka-based event streaming, **multi-tenancy, PII encryption, notifications, and event-driven architecture**.
 
 **Overall assessment: Strong foundation with significant architectural strengths, but several areas need hardening before production deployment.**
 
@@ -216,14 +216,16 @@ Several methods accept or return `Dict[str, Any]` where structured types would b
 8. **`.gitignore`** — remove cache files
 
 ### Phase 2: Production Features
-1. **Multi-tenancy** — tenant isolation for SaaS deployment
+1. **Multi-tenancy** — ✅ DONE — tenant isolation for SaaS deployment
 2. **Payment rail integrations** — InstaPay, PESONet, GCash (for Philippines)
-3. **Notification engine** — SMS/email/push for alerts and reminders
-4. **Regulatory reporting** — BSP, CBN templates
-5. **Async I/O** with asyncpg
-6. **API router split** — one file per module
-7. **Configuration management** — env vars, config files
-8. **Docker + Kubernetes** deployment manifests
+3. **Notification engine** — ✅ DONE — SMS/email/push for alerts and reminders
+4. **PII encryption at rest** — ✅ DONE — AES-GCM/Fernet field-level encryption  
+5. **Event-driven architecture** — ✅ DONE — Observer pattern with publish/subscribe
+6. **Regulatory reporting** — BSP, CBN templates
+7. **Async I/O** with asyncpg
+8. **API router split** — one file per module
+9. **Configuration management** — env vars, config files
+10. **Docker + Kubernetes** deployment manifests
 
 ### Phase 3: Competitive Differentiation
 1. **Branch/agent management** — offline-capable, sync protocol

@@ -38,10 +38,14 @@ asyncpg = {version = ">=0.28.0", optional = true}
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = {version = ">=2.0.0", optional = true}
 
+[tool.poetry.group.encryption.dependencies]
+cryptography = {version = ">=3.4.0", optional = true}
+
 [tool.poetry.extras]
 postgres = ["psycopg2-binary", "asyncpg"]
 kafka = ["confluent-kafka"]
-all = ["psycopg2-binary", "asyncpg", "confluent-kafka"]
+encryption = ["cryptography"]
+all = ["psycopg2-binary", "asyncpg", "confluent-kafka", "cryptography"]
 
 [tool.poetry.scripts]
 nexum = "core_banking.api:run_server"

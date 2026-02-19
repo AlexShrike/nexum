@@ -87,6 +87,72 @@ export NEXUM_LOG_FORMAT="json"  # or "text"
 export NEXUM_LOG_FILE="/var/log/nexum/app.log"  # optional, defaults to stdout
 ```
 
+#### PII Encryption Configuration (Phase 2)
+
+```bash
+# Enable PII encryption at rest
+export NEXUM_ENCRYPTION_ENABLED="true"
+
+# Choose encryption provider (aesgcm recommended for new deployments)
+export NEXUM_ENCRYPTION_PROVIDER="aesgcm"  # or "fernet" or "noop"
+
+# 256-bit master key for encryption (keep this secret and backed up!)
+export NEXUM_ENCRYPTION_MASTER_KEY="your-256-bit-encryption-master-key-change-in-production"
+
+# Optional: Custom salt for key derivation (Fernet only)
+export NEXUM_ENCRYPTION_SALT="custom-salt-for-key-derivation"
+```
+
+**Important Security Notes:**
+- The master key is used to encrypt all PII data (customer names, emails, phone numbers, etc.)
+- Store the master key securely (HSM, key vault, or encrypted config)
+- Never commit the master key to version control
+- If you lose the master key, encrypted data cannot be recovered
+- Use `cryptography` library: `pip install cryptography` or `pip install nexum[encryption]`
+
+#### Multi-Tenancy Configuration (Phase 2)
+
+```bash
+# Enable multi-tenant support
+export NEXUM_MULTI_TENANT="true"
+
+# Tenant isolation strategy
+export NEXUM_TENANT_ISOLATION="shared_table"  # or "schema_per_tenant" or "database_per_tenant"
+
+# Default subscription tier for new tenants
+export NEXUM_DEFAULT_SUBSCRIPTION_TIER="free"  # or "basic", "professional", "enterprise"
+```
+
+**Tenant Context:**
+- Tenants are identified via `X-Tenant-ID` header in API requests
+- Each tenant gets isolated data within the same deployment
+- Supports subdomain-based tenant detection (e.g., `acme.nexum.io`)
+- JWT tokens can include tenant claims for automatic context switching
+
+#### Notification Engine Configuration (Phase 2)
+
+```bash
+# SMTP configuration for email notifications
+export NEXUM_SMTP_HOST="smtp.gmail.com"
+export NEXUM_SMTP_PORT="587"
+export NEXUM_SMTP_USERNAME="your-email@company.com"
+export NEXUM_SMTP_PASSWORD="your-app-password"
+export NEXUM_SMTP_USE_TLS="true"
+
+# SMS configuration (Twilio)
+export NEXUM_TWILIO_ACCOUNT_SID="your-twilio-account-sid"
+export NEXUM_TWILIO_AUTH_TOKEN="your-twilio-auth-token"
+export NEXUM_TWILIO_FROM_NUMBER="+1234567890"
+
+# Webhook configuration
+export NEXUM_WEBHOOK_DEFAULT_URL="https://your-app.com/webhooks/nexum"
+export NEXUM_WEBHOOK_TIMEOUT="30"
+
+# Push notification configuration (Firebase)
+export NEXUM_FIREBASE_SERVER_KEY="your-firebase-server-key"
+export NEXUM_FIREBASE_PROJECT_ID="your-firebase-project-id"
+```
+
 ### 5. PostgreSQL Setup (Production Recommended)
 
 For production deployments, PostgreSQL is recommended for its JSONB support and ACID guarantees.

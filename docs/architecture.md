@@ -176,6 +176,159 @@ flowchart TD
     style PG_TRANSACTIONS fill:#c8e6c9
 ```
 
+## Phase 2 Architecture Enhancements
+
+### Multi-Tenancy Layer
+
+```mermaid
+graph LR
+    subgraph "Request Flow"
+        REQ[Request] --> MW[Tenant Middleware]
+        MW --> CTX[Tenant Context]
+    end
+    
+    subgraph "Storage Stack"
+        APP[Application Layer] --> ES[EncryptedStorage]
+        ES --> TAS[TenantAwareStorage]
+        TAS --> BASE[Base Storage]
+        BASE --> DB[Database]
+    end
+    
+    subgraph "Tenant Extraction"
+        MW --> H[X-Tenant-ID Header]
+        MW --> SUB[Subdomain Detection]
+        MW --> JWT[JWT Claims]
+    end
+```
+
+### Event-Driven Architecture (Observer Pattern)
+
+```mermaid
+graph TD
+    subgraph "Domain Events"
+        TX[Transaction Events] 
+        ACC[Account Events]
+        CUST[Customer Events]
+        LOAN[Loan Events]
+        COMP[Compliance Events]
+    end
+    
+    subgraph "Event Dispatcher"
+        ED[EventDispatcher]
+        SUB[Subscribers]
+        PUB[Publishers]
+    end
+    
+    subgraph "Event Consumers"
+        NOT[Notification Engine]
+        AUDIT[Audit Logger]
+        KAFKA[Kafka Publisher]
+        CUSTOM[Custom Handlers]
+    end
+    
+    TX --> ED
+    ACC --> ED
+    CUST --> ED
+    LOAN --> ED
+    COMP --> ED
+    
+    ED --> SUB
+    SUB --> NOT
+    SUB --> AUDIT
+    SUB --> KAFKA
+    SUB --> CUSTOM
+```
+
+### Notification Engine Flow
+
+```mermaid
+graph LR
+    subgraph "Event Sources"
+        DOMAIN[Domain Events] --> ENGINE[Notification Engine]
+        API[Direct API Calls] --> ENGINE
+    end
+    
+    subgraph "Processing"
+        ENGINE --> TEMP[Template Engine]
+        TEMP --> PREF[User Preferences]
+        PREF --> QUIET[Quiet Hours Check]
+    end
+    
+    subgraph "Delivery Channels"
+        QUIET --> EMAIL[Email Provider]
+        QUIET --> SMS[SMS Provider]
+        QUIET --> PUSH[Push Provider]
+        QUIET --> WH[Webhook Provider]
+        QUIET --> APP[In-App Provider]
+    end
+    
+    subgraph "Tracking"
+        EMAIL --> TRACK[Delivery Tracking]
+        SMS --> TRACK
+        PUSH --> TRACK
+        WH --> TRACK
+        APP --> TRACK
+    end
+```
+
+### Encryption Layer Architecture
+
+```mermaid
+graph TD
+    subgraph "Application Layer"
+        APP[Business Logic] --> ES[EncryptedStorage]
+    end
+    
+    subgraph "Encryption Layer"
+        ES --> DETECT{Is PII Field?}
+        DETECT -->|Yes| ENC[Encrypt]
+        DETECT -->|No| PASS[Pass Through]
+        ENC --> STORE[Storage Layer]
+        PASS --> STORE
+    end
+    
+    subgraph "Encryption Providers"
+        ENC --> FERNET[Fernet Provider]
+        ENC --> AES[AES-GCM Provider]
+        ENC --> NOOP[NoOp Provider]
+    end
+    
+    subgraph "Key Management"
+        MASTER[Master Key] --> KDF[Key Derivation]
+        KDF --> FIELD[Field-Specific Keys]
+    end
+```
+
+### Full Storage Stack
+
+```mermaid
+graph TD
+    subgraph "Application"
+        BL[Business Logic]
+    end
+    
+    subgraph "Storage Wrappers"
+        BL --> ES[EncryptedStorage]
+        ES --> TAS[TenantAwareStorage]
+        TAS --> BASE[Base Storage Interface]
+    end
+    
+    subgraph "Storage Implementations"
+        BASE --> PG[PostgreSQLStorage]
+        BASE --> LITE[SQLiteStorage]
+        BASE --> MEM[InMemoryStorage]
+    end
+    
+    subgraph "Features"
+        ES --> E1[PII Encryption]
+        ES --> E2[Key Rotation]
+        TAS --> T1[Tenant Isolation]
+        TAS --> T2[Multi-Tenancy]
+        BASE --> B1[ACID Transactions]
+        BASE --> B2[Query Interface]
+    end
+```
+
 ### Storage Abstraction
 The storage layer provides a pluggable interface supporting multiple backends:
 

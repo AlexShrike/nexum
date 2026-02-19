@@ -1,6 +1,6 @@
 # API Reference
 
-Nexum provides 120 REST API endpoints organized by functional modules. All endpoints support JSON request/response format and follow REST conventions.
+Nexum provides 130+ REST API endpoints organized by functional modules. All endpoints support JSON request/response format and follow REST conventions.
 
 ## Base URL
 
@@ -912,5 +912,322 @@ Configure webhooks to receive real-time notifications:
     }
   },
   "timestamp": "2026-02-19T15:32:00.000000"
+}
+```
+
+## Notification Engine Endpoints (10 endpoints)
+
+### POST /notifications/send
+Send a notification to a recipient via specified channels.
+
+**Request:**
+```json
+{
+  "notification_type": "transaction_alert",
+  "recipient_id": "cust_123",
+  "data": {
+    "customer_name": "John Doe",
+    "amount": "$500.00",
+    "transaction_type": "withdrawal",
+    "account_name": "Checking Account",
+    "timestamp": "2026-02-19T15:32:00.000000",
+    "reference": "txn_abc123"
+  },
+  "channels": ["email", "sms"],
+  "priority": "medium"
+}
+```
+
+**Response (200):**
+```json
+{
+  "notification_ids": ["notif_abc123", "notif_def456"],
+  "sent_count": 2,
+  "failed_count": 0
+}
+```
+
+### POST /notifications/bulk
+Send notifications to multiple recipients.
+
+**Request:**
+```json
+{
+  "notification_type": "payment_due",
+  "recipient_ids": ["cust_123", "cust_456"],
+  "data": {
+    "amount": "$1,200.00",
+    "due_date": "2026-03-01",
+    "loan_type": "Personal Loan"
+  },
+  "channels": ["email"]
+}
+```
+
+### GET /notifications/templates
+List all notification templates.
+
+**Response (200):**
+```json
+{
+  "templates": [
+    {
+      "id": "transaction_alert_email",
+      "name": "Transaction Alert - Email",
+      "notification_type": "transaction_alert",
+      "channel": "email",
+      "subject_template": "Transaction Alert: {amount} {transaction_type}",
+      "body_template": "Dear {customer_name}...",
+      "is_active": true
+    }
+  ]
+}
+```
+
+### POST /notifications/templates
+Create a new notification template.
+
+**Request:**
+```json
+{
+  "name": "Loan Approval - SMS",
+  "notification_type": "loan_approved", 
+  "channel": "sms",
+  "subject_template": "Loan Approved!",
+  "body_template": "Congratulations! Your {loan_type} for {amount} has been approved."
+}
+```
+
+### GET /notifications/{recipient_id}
+Get notifications for a specific recipient.
+
+**Query Parameters:**
+- `status`: Filter by notification status (sent, pending, failed, read)
+- `limit`: Maximum notifications to return (default: 50)
+
+**Response (200):**
+```json
+{
+  "notifications": [
+    {
+      "id": "notif_abc123",
+      "notification_type": "transaction_alert",
+      "channel": "email",
+      "priority": "medium",
+      "subject": "Transaction Alert: $500.00 withdrawal",
+      "status": "sent",
+      "sent_at": "2026-02-19T15:32:00.000000"
+    }
+  ],
+  "unread_count": 3
+}
+```
+
+### PUT /notifications/{notification_id}/read
+Mark a notification as read.
+
+**Response (200):**
+```json
+{
+  "message": "Notification marked as read",
+  "read_at": "2026-02-19T15:35:00.000000"
+}
+```
+
+### GET /notifications/{recipient_id}/preferences
+Get notification preferences for a recipient.
+
+### PUT /notifications/{recipient_id}/preferences
+Update notification preferences for a recipient.
+
+**Request:**
+```json
+{
+  "channel_preferences": {
+    "transaction_alert": ["email", "in_app"],
+    "payment_due": ["sms", "email"]
+  },
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "08:00",
+  "do_not_disturb": false
+}
+```
+
+### POST /notifications/retry
+Retry failed notifications.
+
+**Request:**
+```json
+{
+  "max_retries": 3
+}
+```
+
+### GET /notifications/stats
+Get notification delivery statistics.
+
+**Response (200):**
+```json
+{
+  "total_notifications": 1250,
+  "delivery_rate": 0.97,
+  "by_status": {
+    "sent": 1213,
+    "failed": 25,
+    "pending": 12
+  },
+  "by_channel": {
+    "email": 750,
+    "sms": 300,
+    "in_app": 200
+  }
+}
+```
+
+## Multi-Tenancy Endpoints (8 endpoints)
+
+### POST /tenants
+Create a new tenant.
+
+**Request:**
+```json
+{
+  "name": "ACME Bank",
+  "code": "ACME_BANK",
+  "display_name": "ACME Bank",
+  "description": "Leading community bank",
+  "subscription_tier": "professional",
+  "contact_email": "admin@acmebank.com",
+  "max_users": 100,
+  "max_accounts": 10000,
+  "primary_color": "#1976D2"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "tenant_abc123",
+  "name": "ACME Bank",
+  "code": "ACME_BANK",
+  "display_name": "ACME Bank",
+  "is_active": true,
+  "created_at": "2026-02-19T15:32:00.000000"
+}
+```
+
+### GET /tenants
+List all tenants (super-admin only).
+
+**Query Parameters:**
+- `is_active`: Filter by active status
+- `subscription_tier`: Filter by subscription tier
+
+**Response (200):**
+```json
+{
+  "tenants": [
+    {
+      "id": "tenant_abc123",
+      "name": "ACME Bank",
+      "code": "ACME_BANK",
+      "subscription_tier": "professional",
+      "is_active": true,
+      "user_count": 25,
+      "account_count": 1500
+    }
+  ]
+}
+```
+
+### GET /tenants/{tenant_id}
+Get tenant details.
+
+### PUT /tenants/{tenant_id}
+Update tenant configuration.
+
+### POST /tenants/{tenant_id}/activate
+Activate a tenant.
+
+### POST /tenants/{tenant_id}/deactivate
+Deactivate a tenant.
+
+### GET /tenants/{tenant_id}/stats
+Get tenant usage statistics.
+
+**Response (200):**
+```json
+{
+  "tenant_id": "tenant_abc123",
+  "user_count": 25,
+  "account_count": 1500,
+  "transaction_count": 50000,
+  "total_balance": "15750000.00",
+  "last_activity": "2026-02-19T15:30:00.000000"
+}
+```
+
+### GET /tenants/usage-report
+Get usage report for all tenants (super-admin only).
+
+**Headers:** `X-Tenant-ID: tenant_abc123` (for tenant-specific requests)
+
+## Encryption Management Endpoints (3 endpoints)
+
+### GET /encryption/status
+Get encryption status and configuration.
+
+**Response (200):**
+```json
+{
+  "encryption_enabled": true,
+  "provider": "aesgcm",
+  "encrypted_tables": ["customers", "accounts"],
+  "pii_fields": {
+    "customers": ["first_name", "last_name", "email", "phone", "address"],
+    "accounts": ["account_number"]
+  },
+  "encryption_stats": {
+    "encrypt_count": 15230,
+    "decrypt_count": 45670
+  }
+}
+```
+
+### POST /encryption/rotate-keys
+Rotate encryption keys (super-admin only).
+
+**Request:**
+```json
+{
+  "new_master_key": "new-256-bit-master-key",
+  "provider": "aesgcm",
+  "dry_run": false
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Key rotation completed successfully",
+  "stats": {
+    "rotated_records": 1500,
+    "rotated_fields": 7500,
+    "errors": 0
+  },
+  "duration_seconds": 45.2
+}
+```
+
+### GET /encryption/health
+Health check for encryption system.
+
+**Response (200):**
+```json
+{
+  "status": "healthy",
+  "provider_available": true,
+  "key_accessible": true,
+  "last_operation": "2026-02-19T15:30:00.000000"
 }
 ```

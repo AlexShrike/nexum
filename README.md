@@ -3,13 +3,13 @@
 
 ![Nexum Logo](https://via.placeholder.com/150x75/4CAF50/FFFFFF?text=NEXUM)
 
-[![Tests Passing](https://img.shields.io/badge/tests-514%20passing-brightgreen)](./tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-642%20passing-brightgreen)](./tests/)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue)](https://python.org)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## What is Nexum?
 
-Nexum is an open-source, modular, API-first core banking system built for production environments. With 41+ specialized modules, 120 REST endpoints, and 514 comprehensive tests, Nexum provides enterprise-grade financial infrastructure with PostgreSQL support, JWT authentication, and Kafka integration. Built on double-entry accounting principles with hash-chained audit trails, it ensures data integrity and regulatory compliance from day one.
+Nexum is an open-source, modular, API-first core banking system built for production environments. With 29+ specialized modules, 130+ REST endpoints, and 642 comprehensive tests, Nexum provides enterprise-grade financial infrastructure with PostgreSQL support, JWT authentication, and Kafka integration. Built on double-entry accounting principles with hash-chained audit trails, it ensures data integrity and regulatory compliance from day one.
 
 ## ✨ Key Features
 
@@ -24,10 +24,14 @@ Nexum is an open-source, modular, API-first core banking system built for produc
 ⚙️ **Configurable workflow engine** (approval chains, SLA)  
 🔐 **Role-based access control** (8 roles, 30 permissions)  
 🏷️ **Custom fields** on any entity  
-🚀 **120 REST API endpoints** with OpenAPI/Swagger docs  
+🚀 **130+ REST API endpoints** with OpenAPI/Swagger docs  
 🏭 **Production-Ready Infrastructure** (PostgreSQL, JWT auth, Kafka events)  
 ⚡ **ACID transactions** with migration system  
-📊 **Rate limiting** (60 req/min) and structured JSON logging
+📊 **Rate limiting** (60 req/min) and structured JSON logging  
+🔒 **PII Encryption at Rest** (AES-256-GCM/Fernet) for sensitive data  
+🏢 **Multi-Tenancy Support** with tenant isolation and branding  
+📧 **Notification Engine** (Email, SMS, Push, Webhook, In-App)  
+🎯 **Event-Driven Architecture** with Observer pattern (publish/subscribe)
 
 ## 🏭 Production Ready Features
 
@@ -100,6 +104,14 @@ pip install -r requirements.txt
 export NEXUM_DATABASE_URL="postgresql://user:pass@localhost/nexum"
 export NEXUM_JWT_SECRET="your-secret-key-change-in-production"
 
+# Configure encryption for PII data (optional)
+export NEXUM_ENCRYPTION_ENABLED="true"
+export NEXUM_ENCRYPTION_PROVIDER="aesgcm"  # or "fernet"
+export NEXUM_ENCRYPTION_MASTER_KEY="your-256-bit-encryption-master-key"
+
+# Configure multi-tenancy (optional)
+export NEXUM_MULTI_TENANT="true"
+
 # Start the server
 python run.py
 
@@ -131,6 +143,10 @@ The API will be available at `http://localhost:8090` with interactive docs at `/
 | **currency.py** | Multi-currency support | 265 |
 | **storage.py** | Storage abstraction layer | 358 |
 | **products.py** | Product configuration engine | 692 |
+| **events.py** | Event dispatcher and observer pattern | 412 |
+| **notifications.py** | Multi-channel notification engine | 1,068 |
+| **tenancy.py** | Multi-tenant isolation and management | 495 |
+| **encryption.py** | PII encryption at rest with key rotation | 488 |
 | **__init__.py** | Package initialization | 5 |
 
 ## 🔌 API Overview
@@ -153,10 +169,13 @@ The API will be available at `http://localhost:8090` with interactive docs at `/
 | **Custom Fields** | 4 | Dynamic field management |
 | **Audit** | 2 | Audit trail queries, integrity checks |
 
+| **Notifications** | 10 | Notification templates, sending, preferences |
+| **Tenancy** | 8 | Multi-tenant management, stats, branding |
+| **Encryption** | 3 | Key management, encryption status, rotation |
 | **Kafka Events** | 6 | Event streaming, consumer management |  
 | **Authentication** | 3 | Login, logout, token refresh |
 
-**Total: 120 REST endpoints**
+**Total: 130+ REST endpoints**
 
 ## 🛠️ Technology Stack
 
@@ -179,7 +198,7 @@ Run the complete test suite:
 python -m pytest tests/ -v
 ```
 
-**Test Coverage**: 514 tests across 16 test modules covering:
+**Test Coverage**: 642 tests across 16 test modules covering:
 - Unit tests for all financial calculations
 - Integration tests for complete workflows
 - Edge cases and error conditions
@@ -189,7 +208,7 @@ python -m pytest tests/ -v
 
 ```
 nexum/
-├── core_banking/           # Main package (41+ modules)
+├── core_banking/           # Main package (29+ modules)
 │   ├── api.py             # Main API server
 │   ├── api_modular/       # Modular API routers (15 modules)
 │   ├── config.py          # Environment-based configuration
@@ -213,6 +232,10 @@ nexum/
 │   ├── currency.py       # Multi-currency
 │   ├── storage.py        # Storage abstraction
 │   ├── products.py       # Product configuration
+│   ├── events.py         # Event dispatcher (observer pattern)
+│   ├── notifications.py  # Multi-channel notifications
+│   ├── tenancy.py        # Multi-tenant support
+│   ├── encryption.py     # PII encryption at rest
 │   └── event_hooks.py    # Kafka event hooks
 ├── tests/                 # Test suite (514 tests)
 │   ├── test_ledger.py    # Ledger tests
