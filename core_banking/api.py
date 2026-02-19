@@ -178,6 +178,192 @@ class LoanPaymentRequest(BaseModel):
     source_account_id: Optional[str] = None
 
 
+# Pydantic models for new modules
+
+# Product models
+class CreateProductRequest(BaseModel):
+    name: str
+    description: str
+    product_type: str = Field(..., description="Product type (savings, checking, loan, credit_line)")
+    currency: str = Field(..., description="Currency code")
+    product_code: Optional[str] = None
+    interest_rate: Optional[str] = None
+    fees: Optional[List[str]] = None
+
+
+class UpdateProductRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    interest_rate: Optional[str] = None
+    fees: Optional[List[str]] = None
+
+
+class CalculateFeesRequest(BaseModel):
+    event_type: str
+    amount: MoneyModel
+
+
+# Collections models
+class RecordActionRequest(BaseModel):
+    action_type: str
+    performed_by: str
+    notes: str
+    result: str
+    next_follow_up: Optional[str] = None
+
+
+class RecordPromiseRequest(BaseModel):
+    promised_amount: MoneyModel
+    promised_date: str
+
+
+class AssignCollectorRequest(BaseModel):
+    collector_id: str
+
+
+class ResolveCaseRequest(BaseModel):
+    resolution: str
+
+
+class SetStrategyRequest(BaseModel):
+    product_id: Optional[str] = None
+    escalation_rules: Optional[List[Dict]] = None
+    auto_write_off_days: Optional[int] = None
+
+
+# Reporting models
+class CreateReportRequest(BaseModel):
+    name: str
+    description: str
+    report_type: str
+
+
+class RunReportRequest(BaseModel):
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+
+
+# Workflow models
+class CreateWorkflowDefinitionRequest(BaseModel):
+    name: str
+    description: str
+    workflow_type: str
+    steps: List[Dict[str, Any]]
+    sla_hours: Optional[int] = None
+
+
+class StartWorkflowRequest(BaseModel):
+    definition_id: str
+    entity_type: str
+    entity_id: str
+    context: Optional[Dict[str, Any]] = None
+
+
+class ApproveStepRequest(BaseModel):
+    comments: Optional[str] = None
+
+
+class RejectStepRequest(BaseModel):
+    comments: Optional[str] = None
+
+
+class SkipStepRequest(BaseModel):
+    reason: str
+
+
+class AssignStepRequest(BaseModel):
+    user: str
+
+
+class CancelWorkflowRequest(BaseModel):
+    reason: str
+
+
+# RBAC models
+class CreateRoleRequest(BaseModel):
+    name: str
+    description: str
+    permissions: List[str]
+    max_transaction_amount: Optional[MoneyModel] = None
+    max_approval_amount: Optional[MoneyModel] = None
+
+
+class UpdateRoleRequest(BaseModel):
+    description: Optional[str] = None
+    permissions: Optional[List[str]] = None
+    max_transaction_amount: Optional[MoneyModel] = None
+    max_approval_amount: Optional[MoneyModel] = None
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: str
+    full_name: str
+    roles: List[str]
+    password: Optional[str] = None
+
+
+class UpdateUserRequest(BaseModel):
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    branch_id: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+# Custom Fields models
+class CreateFieldRequest(BaseModel):
+    name: str
+    label: str
+    description: str
+    field_type: str
+    entity_type: str
+    is_required: bool = False
+    is_searchable: bool = False
+    is_reportable: bool = False
+    default_value: Optional[Any] = None
+    enum_values: Optional[List[str]] = None
+    group_name: Optional[str] = None
+
+
+class UpdateFieldRequest(BaseModel):
+    label: Optional[str] = None
+    description: Optional[str] = None
+    is_required: Optional[bool] = None
+    is_searchable: Optional[bool] = None
+    is_reportable: Optional[bool] = None
+    default_value: Optional[Any] = None
+    enum_values: Optional[List[str]] = None
+    group_name: Optional[str] = None
+
+
+class SetFieldValueRequest(BaseModel):
+    field_name: str
+    value: Any
+
+
+class BulkSetValuesRequest(BaseModel):
+    values: Dict[str, Any]
+
+
+# Import new modules
+from .products import ProductEngine, Product, ProductStatus, ProductType as ProductEngineType
+from .collections import CollectionsManager, DelinquencyStatus, CollectionAction, ActionResult
+from .reporting import ReportingEngine, ReportType, ReportFormat
+from .workflows import WorkflowEngine, WorkflowType, WorkflowStatus, StepStatus
+from .rbac import RBACManager, Permission, Role as RBACRole
+from .custom_fields import CustomFieldManager, FieldType, EntityType as CustomEntityType
+
+
 # Banking System Context
 class BankingSystem:
     """Core banking system with all components initialized"""
@@ -211,6 +397,20 @@ class BankingSystem:
             self.storage, self.account_manager, self.transaction_processor,
             self.audit_trail
         )
+        
+        # Initialize new modules
+        self.product_engine = ProductEngine(self.storage, self.audit_trail)
+        self.collections_manager = CollectionsManager(
+            self.storage, self.account_manager, self.loan_manager, self.credit_manager
+        )
+        self.reporting_engine = ReportingEngine(
+            self.storage, self.ledger, self.account_manager, self.loan_manager,
+            self.credit_manager, self.collections_manager, self.customer_manager,
+            self.product_engine, self.audit_trail
+        )
+        self.workflow_engine = WorkflowEngine(self.storage, self.audit_trail)
+        self.rbac_manager = RBACManager(self.storage, self.audit_trail)
+        self.custom_field_manager = CustomFieldManager(self.storage, self.audit_trail)
 
 
 # Global banking system instance
@@ -873,6 +1073,457 @@ async def get_compliance_alerts(
     return {"alerts": result}
 
 
+# Products API Endpoints
+@app.post("/products", status_code=status.HTTP_201_CREATED, tags=["Products"])
+async def create_product(
+    request: CreateProductRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create a new product definition"""
+    try:
+        product = system.product_engine.create_product(
+            name=request.name,
+            description=request.description,
+            product_type=ProductType[request.product_type.upper()],
+            currency=Currency[request.currency.upper()],
+            product_code=request.product_code
+        )
+        
+        return {
+            "product_id": product.id,
+            "product_code": product.product_code,
+            "message": "Product created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/products", tags=["Products"])
+async def list_products(
+    product_type: Optional[str] = None,
+    status: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List products with optional filters"""
+    try:
+        pt_filter = None
+        status_filter = None
+        
+        if product_type:
+            pt_filter = ProductType[product_type.upper()]
+        if status:
+            status_filter = ProductStatus[status.upper()]
+        
+        products = system.product_engine.list_products(pt_filter, status_filter)
+        
+        result = []
+        for product in products:
+            result.append({
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "product_type": product.product_type.value,
+                "currency": product.currency.code,
+                "product_code": product.product_code,
+                "status": product.status.value,
+                "created_at": product.created_at.isoformat()
+            })
+        
+        return {"products": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/products/{product_id}", tags=["Products"])
+async def get_product(
+    product_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get product by ID"""
+    product = system.product_engine.get_product(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    return {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "product_type": product.product_type.value,
+        "currency": product.currency.code,
+        "product_code": product.product_code,
+        "status": product.status.value,
+        "version": product.version,
+        "created_at": product.created_at.isoformat(),
+        "updated_at": product.updated_at.isoformat()
+    }
+
+
+@app.put("/products/{product_id}", tags=["Products"])
+async def update_product(
+    product_id: str,
+    request: UpdateProductRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Update product"""
+    try:
+        updates = {}
+        if request.name:
+            updates["name"] = request.name
+        if request.description:
+            updates["description"] = request.description
+        if request.interest_rate:
+            from decimal import Decimal
+            updates["interest_rate"] = Decimal(request.interest_rate)
+        
+        product = system.product_engine.update_product(product_id, **updates)
+        
+        return {"message": "Product updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/products/{product_id}/activate", tags=["Products"])
+async def activate_product(
+    product_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Activate product"""
+    try:
+        product = system.product_engine.activate_product(product_id)
+        return {"message": "Product activated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/products/{product_id}/suspend", tags=["Products"])
+async def suspend_product(
+    product_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Suspend product"""
+    try:
+        product = system.product_engine.suspend_product(product_id)
+        return {"message": "Product suspended successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/products/{product_id}/retire", tags=["Products"])
+async def retire_product(
+    product_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Retire product"""
+    try:
+        product = system.product_engine.retire_product(product_id)
+        return {"message": "Product retired successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/products/{product_id}/fees", tags=["Products"])
+async def calculate_fees(
+    product_id: str,
+    event_type: str,
+    amount: str,
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Calculate fees for a product"""
+    try:
+        product = system.product_engine.get_product(product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        amount_money = Money(Decimal(amount), Currency[currency.upper()])
+        fee_amount = system.product_engine.calculate_fees(product, event_type, amount_money)
+        
+        return {
+            "event_type": event_type,
+            "amount": MoneyModel.from_money(amount_money).dict(),
+            "fee_amount": MoneyModel.from_money(fee_amount).dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/products/{product_id}/interest-rate", tags=["Products"])
+async def get_interest_rate(
+    product_id: str,
+    risk_score: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get interest rate for product"""
+    try:
+        product = system.product_engine.get_product(product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        risk_score_decimal = None
+        if risk_score:
+            risk_score_decimal = Decimal(risk_score)
+        
+        rate = system.product_engine.get_interest_rate(product, risk_score_decimal)
+        
+        return {
+            "product_id": product_id,
+            "interest_rate": str(rate) if rate else None,
+            "risk_score": risk_score
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Collections API Endpoints
+@app.post("/collections/scan", tags=["Collections"])
+async def scan_delinquencies(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Scan for delinquencies"""
+    try:
+        results = system.collections_manager.scan_delinquencies()
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collections/cases", tags=["Collections"])
+async def list_cases(
+    status: Optional[str] = None,
+    priority: Optional[int] = None,
+    collector: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List collection cases"""
+    try:
+        status_filter = None
+        if status:
+            status_filter = DelinquencyStatus[status.upper()]
+        
+        cases = system.collections_manager.get_cases(status_filter, priority, collector)
+        
+        result = []
+        for case in cases:
+            result.append({
+                "id": case.id,
+                "status": case.status.value,
+                "days_past_due": case.days_past_due,
+                "amount_overdue": MoneyModel.from_money(case.amount_overdue).dict(),
+                "priority": case.priority,
+                "assigned_collector": case.assigned_collector,
+                "customer_id": case.customer_id,
+                "created_at": case.created_at.isoformat()
+            })
+        
+        return {"cases": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collections/cases/{case_id}", tags=["Collections"])
+async def get_case(
+    case_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get case details"""
+    case = system.collections_manager.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    return {
+        "id": case.id,
+        "status": case.status.value,
+        "days_past_due": case.days_past_due,
+        "amount_overdue": MoneyModel.from_money(case.amount_overdue).dict(),
+        "total_outstanding": MoneyModel.from_money(case.total_outstanding).dict(),
+        "priority": case.priority,
+        "assigned_collector": case.assigned_collector,
+        "customer_id": case.customer_id,
+        "account_id": case.account_id,
+        "created_at": case.created_at.isoformat(),
+        "resolved_at": case.resolved_at.isoformat() if case.resolved_at else None
+    }
+
+
+@app.put("/collections/cases/{case_id}/assign", tags=["Collections"])
+async def assign_collector(
+    case_id: str,
+    request: AssignCollectorRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Assign collector to case"""
+    try:
+        case = system.collections_manager.assign_collector(case_id, request.collector_id)
+        return {"message": "Collector assigned successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/cases/{case_id}/actions", tags=["Collections"])
+async def record_action(
+    case_id: str,
+    request: RecordActionRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Record collection action"""
+    try:
+        next_follow_up = None
+        if request.next_follow_up:
+            next_follow_up = date.fromisoformat(request.next_follow_up)
+        
+        action = system.collections_manager.record_action(
+            case_id=case_id,
+            action_type=CollectionAction[request.action_type.upper()],
+            performed_by=request.performed_by,
+            notes=request.notes,
+            result=ActionResult[request.result.upper()],
+            next_follow_up=next_follow_up
+        )
+        
+        return {
+            "action_id": action.id,
+            "message": "Action recorded successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/cases/{case_id}/promises", tags=["Collections"])
+async def record_promise(
+    case_id: str,
+    request: RecordPromiseRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Record payment promise"""
+    try:
+        promise = system.collections_manager.record_promise(
+            case_id=case_id,
+            promised_amount=request.promised_amount.to_money(),
+            promised_date=date.fromisoformat(request.promised_date)
+        )
+        
+        return {
+            "promise_id": promise.id,
+            "message": "Promise recorded successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/promises/check", tags=["Collections"])
+async def check_promises(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Check for broken promises"""
+    try:
+        results = system.collections_manager.check_promises()
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/cases/{case_id}/resolve", tags=["Collections"])
+async def resolve_case(
+    case_id: str,
+    request: ResolveCaseRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Resolve collection case"""
+    try:
+        from .collections import CaseResolution
+        case = system.collections_manager.resolve_case(
+            case_id=case_id,
+            resolution=CaseResolution[request.resolution.upper()]
+        )
+        
+        return {"message": "Case resolved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collections/summary", tags=["Collections"])
+async def get_collection_summary(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get portfolio collection summary"""
+    try:
+        summary = system.collections_manager.get_collection_summary()
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collections/recovery-rate", tags=["Collections"])
+async def get_recovery_rate(
+    period_start: Optional[str] = None,
+    period_end: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get recovery rate statistics"""
+    try:
+        start_date = None
+        end_date = None
+        
+        if period_start:
+            start_date = date.fromisoformat(period_start)
+        if period_end:
+            end_date = date.fromisoformat(period_end)
+        
+        stats = system.collections_manager.get_recovery_rate(start_date, end_date)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/auto-actions", tags=["Collections"])
+async def run_auto_actions(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Run automatic collection actions"""
+    try:
+        results = system.collections_manager.run_auto_actions()
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/collections/strategies", tags=["Collections"])
+async def set_strategy(
+    request: SetStrategyRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Set collection strategy"""
+    try:
+        from .collections import CollectionStrategy
+        strategy = CollectionStrategy(
+            product_id=request.product_id,
+            auto_write_off_days=request.auto_write_off_days
+        )
+        system.collections_manager.set_strategy(strategy)
+        
+        return {"message": "Strategy updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collections/strategies", tags=["Collections"])
+async def get_strategy(
+    product_id: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get collection strategy"""
+    try:
+        strategy = system.collections_manager.get_strategy(product_id)
+        
+        return {
+            "product_id": strategy.product_id,
+            "auto_write_off_days": strategy.auto_write_off_days,
+            "promise_tolerance_days": strategy.promise_tolerance_days
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # System Information
 @app.get("/")
 async def root():
@@ -890,9 +1541,1474 @@ async def root():
             "credit": "/credit",
             "loans": "/loans",
             "audit": "/audit",
-            "compliance": "/compliance"
+            "compliance": "/compliance",
+            "products": "/products",
+            "collections": "/collections",
+            "reports": "/reports",
+            "workflows": "/workflows",
+            "rbac": "/rbac",
+            "custom-fields": "/custom-fields"
         }
     }
+
+
+# Reporting API Endpoints
+@app.get("/reports/portfolio-summary", tags=["Reports"])
+async def portfolio_summary(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get portfolio summary report"""
+    try:
+        result = system.reporting_engine.portfolio_summary(Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/loan-portfolio", tags=["Reports"])
+async def loan_portfolio_report(
+    currency: str = "USD",
+    product_type: Optional[str] = None,
+    state: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get loan portfolio report"""
+    try:
+        filters = {"currency": currency}
+        if product_type:
+            filters["product_type"] = product_type
+        if state:
+            filters["state"] = state
+        
+        result = system.reporting_engine.loan_portfolio_report(filters)
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/deposit-portfolio", tags=["Reports"])
+async def deposit_portfolio_report(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get deposit portfolio report"""
+    try:
+        filters = {"currency": currency}
+        result = system.reporting_engine.deposit_portfolio_report(filters)
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/delinquency", tags=["Reports"])
+async def delinquency_report(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get delinquency aging report"""
+    try:
+        result = system.reporting_engine.delinquency_report(Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/income-statement", tags=["Reports"])
+async def income_statement(
+    period_start: str,
+    period_end: str,
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get income statement"""
+    try:
+        start_date = datetime.fromisoformat(period_start)
+        end_date = datetime.fromisoformat(period_end)
+        
+        result = system.reporting_engine.income_statement(start_date, end_date, Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "period_start": result.period_start.isoformat(),
+            "period_end": result.period_end.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/transaction-volume", tags=["Reports"])
+async def transaction_volume_report(
+    period_start: str,
+    period_end: str,
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get transaction volume report"""
+    try:
+        start_date = datetime.fromisoformat(period_start)
+        end_date = datetime.fromisoformat(period_end)
+        
+        result = system.reporting_engine.transaction_volume_report(start_date, end_date, Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "period_start": result.period_start.isoformat(),
+            "period_end": result.period_end.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/product-performance", tags=["Reports"])
+async def product_performance_report(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get product performance report"""
+    try:
+        result = system.reporting_engine.product_performance_report(Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/customer-segments", tags=["Reports"])
+async def customer_segments_report(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get customer segments report"""
+    try:
+        result = system.reporting_engine.customer_segment_report(Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/collection-performance", tags=["Reports"])
+async def collection_performance_report(
+    currency: str = "USD",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get collection performance report"""
+    try:
+        result = system.reporting_engine.collection_performance_report(Currency[currency.upper()])
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/reports/definitions", status_code=status.HTTP_201_CREATED, tags=["Reports"])
+async def create_report_definition(
+    request: CreateReportRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create custom report definition"""
+    try:
+        from .reporting import ReportDefinition
+        definition = ReportDefinition(
+            name=request.name,
+            description=request.description,
+            report_type=ReportType[request.report_type.upper()]
+        )
+        
+        created_def = system.reporting_engine.create_report_definition(definition)
+        
+        return {
+            "definition_id": created_def.id,
+            "message": "Report definition created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/definitions", tags=["Reports"])
+async def list_report_definitions(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List report definitions"""
+    try:
+        definitions = system.reporting_engine.list_report_definitions()
+        
+        result = []
+        for definition in definitions:
+            result.append({
+                "id": definition.id,
+                "name": definition.name,
+                "description": definition.description,
+                "report_type": definition.report_type.value,
+                "is_template": definition.is_template,
+                "created_at": definition.created_at.isoformat()
+            })
+        
+        return {"definitions": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/reports/definitions/{report_id}/run", tags=["Reports"])
+async def run_custom_report(
+    report_id: str,
+    request: RunReportRequest = RunReportRequest(),
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Run custom report"""
+    try:
+        period_start = None
+        period_end = None
+        
+        if request.period_start:
+            period_start = datetime.fromisoformat(request.period_start)
+        if request.period_end:
+            period_end = datetime.fromisoformat(request.period_end)
+        
+        result = system.reporting_engine.run_report(
+            report_id=report_id,
+            period_start=period_start,
+            period_end=period_end,
+            filters=request.filters
+        )
+        
+        return {
+            "report_id": result.report_id,
+            "generated_at": result.generated_at.isoformat(),
+            "data": result.data,
+            "totals": result.totals,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/reports/definitions/{report_id}/export", tags=["Reports"])
+async def export_report(
+    report_id: str,
+    format: str = "json",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Export report"""
+    try:
+        # First run the report
+        result = system.reporting_engine.run_report(report_id)
+        
+        # Then export it
+        export_format = ReportFormat[format.upper()]
+        exported = system.reporting_engine.export_report(result, export_format)
+        
+        if format.lower() == "csv":
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(content=exported, media_type="text/csv")
+        else:
+            return exported
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Workflows API Endpoints
+@app.post("/workflows/definitions", status_code=status.HTTP_201_CREATED, tags=["Workflows"])
+async def create_workflow_definition(
+    request: CreateWorkflowDefinitionRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create workflow definition"""
+    try:
+        from .workflows import WorkflowDefinition, WorkflowStepDefinition, StepType
+        
+        # Convert steps
+        steps = []
+        for i, step_data in enumerate(request.steps):
+            step = WorkflowStepDefinition(
+                step_number=i + 1,
+                name=step_data.get("name", f"Step {i + 1}"),
+                step_type=StepType[step_data.get("step_type", "APPROVAL").upper()],
+                required_role=step_data.get("required_role", "BRANCH_MANAGER"),
+                required_approvals=step_data.get("required_approvals", 1)
+            )
+            steps.append(step)
+        
+        definition = WorkflowDefinition(
+            name=request.name,
+            description=request.description,
+            workflow_type=WorkflowType[request.workflow_type.upper()],
+            steps=steps,
+            sla_hours=request.sla_hours
+        )
+        
+        definition_id = system.workflow_engine.create_definition(definition)
+        
+        return {
+            "definition_id": definition_id,
+            "message": "Workflow definition created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/workflows/definitions", tags=["Workflows"])
+async def list_workflow_definitions(
+    workflow_type: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List workflow definitions"""
+    try:
+        wf_type = None
+        if workflow_type:
+            wf_type = WorkflowType[workflow_type.upper()]
+        
+        definitions = system.workflow_engine.list_definitions(wf_type)
+        
+        result = []
+        for definition in definitions:
+            result.append({
+                "id": definition.id,
+                "name": definition.name,
+                "description": definition.description,
+                "workflow_type": definition.workflow_type.value,
+                "is_active": definition.is_active,
+                "steps_count": len(definition.steps),
+                "created_at": definition.created_at.isoformat()
+            })
+        
+        return {"definitions": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/workflows/definitions/{definition_id}", tags=["Workflows"])
+async def get_workflow_definition(
+    definition_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get workflow definition"""
+    definition = system.workflow_engine.get_definition(definition_id)
+    if not definition:
+        raise HTTPException(status_code=404, detail="Workflow definition not found")
+    
+    steps = []
+    for step in definition.steps:
+        steps.append({
+            "step_number": step.step_number,
+            "name": step.name,
+            "step_type": step.step_type.value,
+            "required_role": step.required_role,
+            "required_approvals": step.required_approvals,
+            "sla_hours": step.sla_hours,
+            "can_skip": step.can_skip
+        })
+    
+    return {
+        "id": definition.id,
+        "name": definition.name,
+        "description": definition.description,
+        "workflow_type": definition.workflow_type.value,
+        "is_active": definition.is_active,
+        "steps": steps,
+        "created_at": definition.created_at.isoformat()
+    }
+
+
+@app.post("/workflows/definitions/{definition_id}/activate", tags=["Workflows"])
+async def activate_workflow_definition(
+    definition_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Activate workflow definition"""
+    try:
+        success = system.workflow_engine.activate_definition(definition_id)
+        if success:
+            return {"message": "Workflow definition activated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Workflow definition not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/definitions/{definition_id}/deactivate", tags=["Workflows"])
+async def deactivate_workflow_definition(
+    definition_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Deactivate workflow definition"""
+    try:
+        success = system.workflow_engine.deactivate_definition(definition_id)
+        if success:
+            return {"message": "Workflow definition deactivated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Workflow definition not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows", status_code=status.HTTP_201_CREATED, tags=["Workflows"])
+async def start_workflow(
+    request: StartWorkflowRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Start workflow instance"""
+    try:
+        instance_id = system.workflow_engine.start_workflow(
+            definition_id=request.definition_id,
+            entity_type=request.entity_type,
+            entity_id=request.entity_id,
+            initiated_by="system",
+            context=request.context
+        )
+        
+        if instance_id:
+            return {
+                "instance_id": instance_id,
+                "message": "Workflow started successfully"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to start workflow")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/workflows", tags=["Workflows"])
+async def list_workflows(
+    status: Optional[str] = None,
+    workflow_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List workflow instances"""
+    try:
+        status_filter = None
+        type_filter = None
+        
+        if status:
+            status_filter = WorkflowStatus[status.upper()]
+        if workflow_type:
+            type_filter = WorkflowType[workflow_type.upper()]
+        
+        workflows = system.workflow_engine.get_workflows(status_filter, type_filter, entity_id)
+        
+        result = []
+        for workflow in workflows:
+            result.append({
+                "id": workflow.id,
+                "status": workflow.status.value,
+                "workflow_type": workflow.workflow_type.value,
+                "entity_type": workflow.entity_type,
+                "entity_id": workflow.entity_id,
+                "current_step": workflow.current_step,
+                "initiated_by": workflow.initiated_by,
+                "initiated_at": workflow.initiated_at.isoformat(),
+                "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None
+            })
+        
+        return {"workflows": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/workflows/{instance_id}", tags=["Workflows"])
+async def get_workflow(
+    instance_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get workflow instance"""
+    workflow = system.workflow_engine.get_workflow(instance_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    steps = []
+    for step in workflow.steps:
+        steps.append({
+            "step_number": step.step_number,
+            "name": step.name,
+            "status": step.status.value,
+            "assigned_to": step.assigned_to,
+            "decision": step.decision,
+            "comments": step.comments,
+            "completed_at": step.completed_at.isoformat() if step.completed_at else None
+        })
+    
+    return {
+        "id": workflow.id,
+        "status": workflow.status.value,
+        "workflow_type": workflow.workflow_type.value,
+        "entity_type": workflow.entity_type,
+        "entity_id": workflow.entity_id,
+        "current_step": workflow.current_step,
+        "steps": steps,
+        "context": workflow.context,
+        "initiated_at": workflow.initiated_at.isoformat(),
+        "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None
+    }
+
+
+@app.get("/workflows/pending-tasks", tags=["Workflows"])
+async def get_pending_tasks(
+    role: Optional[str] = None,
+    user: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get pending workflow tasks"""
+    try:
+        tasks = system.workflow_engine.get_pending_tasks(role, user)
+        return {"tasks": tasks}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/{instance_id}/steps/{step_number}/approve", tags=["Workflows"])
+async def approve_workflow_step(
+    instance_id: str,
+    step_number: int,
+    request: ApproveStepRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Approve workflow step"""
+    try:
+        success = system.workflow_engine.approve_step(
+            instance_id=instance_id,
+            step_number=step_number,
+            approver="system",
+            comments=request.comments
+        )
+        
+        if success:
+            return {"message": "Step approved successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to approve step")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/{instance_id}/steps/{step_number}/reject", tags=["Workflows"])
+async def reject_workflow_step(
+    instance_id: str,
+    step_number: int,
+    request: RejectStepRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Reject workflow step"""
+    try:
+        success = system.workflow_engine.reject_step(
+            instance_id=instance_id,
+            step_number=step_number,
+            rejector="system",
+            comments=request.comments
+        )
+        
+        if success:
+            return {"message": "Step rejected successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to reject step")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/{instance_id}/steps/{step_number}/skip", tags=["Workflows"])
+async def skip_workflow_step(
+    instance_id: str,
+    step_number: int,
+    request: SkipStepRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Skip workflow step"""
+    try:
+        success = system.workflow_engine.skip_step(
+            instance_id=instance_id,
+            step_number=step_number,
+            skipped_by="system",
+            reason=request.reason
+        )
+        
+        if success:
+            return {"message": "Step skipped successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to skip step")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/{instance_id}/steps/{step_number}/assign", tags=["Workflows"])
+async def assign_workflow_step(
+    instance_id: str,
+    step_number: int,
+    request: AssignStepRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Assign workflow step"""
+    try:
+        success = system.workflow_engine.assign_step(
+            instance_id=instance_id,
+            step_number=step_number,
+            user=request.user
+        )
+        
+        if success:
+            return {"message": "Step assigned successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to assign step")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/{instance_id}/cancel", tags=["Workflows"])
+async def cancel_workflow(
+    instance_id: str,
+    request: CancelWorkflowRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Cancel workflow"""
+    try:
+        success = system.workflow_engine.cancel_workflow(
+            instance_id=instance_id,
+            cancelled_by="system",
+            reason=request.reason
+        )
+        
+        if success:
+            return {"message": "Workflow cancelled successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to cancel workflow")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/workflows/check-sla", tags=["Workflows"])
+async def check_sla_breaches(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Check SLA breaches"""
+    try:
+        breaches = system.workflow_engine.check_sla_breaches()
+        return {"breaches": breaches}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/workflows/history/{entity_type}/{entity_id}", tags=["Workflows"])
+async def get_workflow_history(
+    entity_type: str,
+    entity_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get workflow history for entity"""
+    try:
+        workflows = system.workflow_engine.get_workflow_history(entity_type, entity_id)
+        
+        result = []
+        for workflow in workflows:
+            result.append({
+                "id": workflow.id,
+                "status": workflow.status.value,
+                "workflow_type": workflow.workflow_type.value,
+                "initiated_at": workflow.initiated_at.isoformat(),
+                "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None
+            })
+        
+        return {"workflows": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# RBAC API Endpoints
+@app.post("/rbac/roles", status_code=status.HTTP_201_CREATED, tags=["RBAC"])
+async def create_role(
+    request: CreateRoleRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create role"""
+    try:
+        permissions = {Permission[p.upper()] for p in request.permissions}
+        
+        max_transaction = None
+        if request.max_transaction_amount:
+            max_transaction = request.max_transaction_amount.to_money()
+        
+        max_approval = None
+        if request.max_approval_amount:
+            max_approval = request.max_approval_amount.to_money()
+        
+        role_id = system.rbac_manager.create_role(
+            name=request.name,
+            description=request.description,
+            permissions=permissions,
+            max_transaction_amount=max_transaction,
+            max_approval_amount=max_approval
+        )
+        
+        return {
+            "role_id": role_id,
+            "message": "Role created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/roles", tags=["RBAC"])
+async def list_roles(
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List roles"""
+    try:
+        roles = system.rbac_manager.list_roles()
+        
+        result = []
+        for role in roles:
+            result.append({
+                "id": role.id,
+                "name": role.name,
+                "description": role.description,
+                "permissions": [p.value for p in role.permissions],
+                "is_system_role": role.is_system_role,
+                "created_at": role.created_at.isoformat()
+            })
+        
+        return {"roles": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/roles/{role_id}", tags=["RBAC"])
+async def get_role(
+    role_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get role"""
+    role = system.rbac_manager.get_role(role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    return {
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "permissions": [p.value for p in role.permissions],
+        "is_system_role": role.is_system_role,
+        "max_transaction_amount": MoneyModel.from_money(role.max_transaction_amount).dict() if role.max_transaction_amount else None,
+        "max_approval_amount": MoneyModel.from_money(role.max_approval_amount).dict() if role.max_approval_amount else None,
+        "created_at": role.created_at.isoformat()
+    }
+
+
+@app.put("/rbac/roles/{role_id}", tags=["RBAC"])
+async def update_role(
+    role_id: str,
+    request: UpdateRoleRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Update role"""
+    try:
+        updates = {}
+        if request.description:
+            updates["description"] = request.description
+        if request.permissions:
+            updates["permissions"] = {Permission[p.upper()] for p in request.permissions}
+        if request.max_transaction_amount:
+            updates["max_transaction_amount"] = request.max_transaction_amount.to_money()
+        if request.max_approval_amount:
+            updates["max_approval_amount"] = request.max_approval_amount.to_money()
+        
+        success = system.rbac_manager.update_role(role_id, **updates)
+        if success:
+            return {"message": "Role updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Role not found or cannot be updated")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/rbac/roles/{role_id}", tags=["RBAC"])
+async def delete_role(
+    role_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Delete role"""
+    try:
+        success = system.rbac_manager.delete_role(role_id)
+        if success:
+            return {"message": "Role deleted successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Role cannot be deleted")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users", status_code=status.HTTP_201_CREATED, tags=["RBAC"])
+async def create_user(
+    request: CreateUserRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create user"""
+    try:
+        user_id = system.rbac_manager.create_user(
+            username=request.username,
+            email=request.email,
+            full_name=request.full_name,
+            roles=request.roles,
+            created_by="system",
+            password=request.password
+        )
+        
+        return {
+            "user_id": user_id,
+            "message": "User created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/users", tags=["RBAC"])
+async def list_users(
+    role: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List users"""
+    try:
+        users = system.rbac_manager.list_users(role, is_active)
+        
+        result = []
+        for user in users:
+            result.append({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "full_name": user.full_name,
+                "roles": user.roles,
+                "is_active": user.is_active,
+                "is_locked": user.is_locked,
+                "last_login": user.last_login.isoformat() if user.last_login else None,
+                "created_at": user.created_at.isoformat()
+            })
+        
+        return {"users": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/users/{user_id}", tags=["RBAC"])
+async def get_user(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get user"""
+    user = system.rbac_manager.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+        "roles": user.roles,
+        "is_active": user.is_active,
+        "is_locked": user.is_locked,
+        "branch_id": user.branch_id,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+        "created_at": user.created_at.isoformat()
+    }
+
+
+@app.put("/rbac/users/{user_id}", tags=["RBAC"])
+async def update_user(
+    user_id: str,
+    request: UpdateUserRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Update user"""
+    try:
+        success = system.rbac_manager.update_user(
+            user_id=user_id,
+            email=request.email,
+            full_name=request.full_name,
+            branch_id=request.branch_id
+        )
+        
+        if success:
+            return {"message": "User updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users/{user_id}/activate", tags=["RBAC"])
+async def activate_user(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Activate user"""
+    try:
+        success = system.rbac_manager.activate_user(user_id)
+        if success:
+            return {"message": "User activated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users/{user_id}/deactivate", tags=["RBAC"])
+async def deactivate_user(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Deactivate user"""
+    try:
+        success = system.rbac_manager.deactivate_user(user_id)
+        if success:
+            return {"message": "User deactivated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users/{user_id}/lock", tags=["RBAC"])
+async def lock_user(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Lock user"""
+    try:
+        success = system.rbac_manager.lock_user(user_id)
+        if success:
+            return {"message": "User locked successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users/{user_id}/unlock", tags=["RBAC"])
+async def unlock_user(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Unlock user"""
+    try:
+        success = system.rbac_manager.unlock_user(user_id)
+        if success:
+            return {"message": "User unlocked successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/users/{user_id}/roles/{role_id}", tags=["RBAC"])
+async def assign_role_to_user(
+    user_id: str,
+    role_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Assign role to user"""
+    try:
+        success = system.rbac_manager.assign_role(user_id, role_id)
+        if success:
+            return {"message": "Role assigned successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User or role not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/rbac/users/{user_id}/roles/{role_id}", tags=["RBAC"])
+async def remove_role_from_user(
+    user_id: str,
+    role_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Remove role from user"""
+    try:
+        success = system.rbac_manager.remove_role(user_id, role_id)
+        if success:
+            return {"message": "Role removed successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/users/{user_id}/permissions", tags=["RBAC"])
+async def get_user_permissions(
+    user_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get user's permissions"""
+    try:
+        permissions = system.rbac_manager.get_user_permissions(user_id)
+        return {"permissions": [p.value for p in permissions]}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/auth/login", tags=["RBAC"])
+async def login(
+    request: LoginRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Authenticate user"""
+    try:
+        session = system.rbac_manager.authenticate(
+            username=request.username,
+            password=request.password
+        )
+        
+        return {
+            "session_id": session.id,
+            "expires_at": session.expires_at.isoformat(),
+            "message": "Login successful"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.post("/rbac/auth/logout", tags=["RBAC"])
+async def logout(
+    session_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Logout user"""
+    try:
+        success = system.rbac_manager.logout(session_id)
+        if success:
+            return {"message": "Logout successful"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rbac/auth/change-password", tags=["RBAC"])
+async def change_password(
+    user_id: str,
+    request: ChangePasswordRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Change user password"""
+    try:
+        success = system.rbac_manager.change_password(
+            user_id=user_id,
+            old_password=request.old_password,
+            new_password=request.new_password
+        )
+        
+        if success:
+            return {"message": "Password changed successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to change password")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/rbac/auth/session/{session_id}", tags=["RBAC"])
+async def validate_session(
+    session_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Validate session"""
+    try:
+        user = system.rbac_manager.validate_session(session_id)
+        if user:
+            return {
+                "valid": True,
+                "user_id": user.id,
+                "username": user.username,
+                "full_name": user.full_name
+            }
+        else:
+            return {"valid": False}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Custom Fields API Endpoints
+@app.post("/custom-fields/definitions", status_code=status.HTTP_201_CREATED, tags=["Custom Fields"])
+async def create_field_definition(
+    request: CreateFieldRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Create field definition"""
+    try:
+        field_def = system.custom_field_manager.create_field(
+            name=request.name,
+            label=request.label,
+            description=request.description,
+            field_type=FieldType[request.field_type.upper()],
+            entity_type=CustomEntityType[request.entity_type.upper()],
+            is_required=request.is_required,
+            is_searchable=request.is_searchable,
+            is_reportable=request.is_reportable,
+            default_value=request.default_value,
+            enum_values=request.enum_values or [],
+            group_name=request.group_name
+        )
+        
+        return {
+            "field_id": field_def.id,
+            "message": "Field definition created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/definitions", tags=["Custom Fields"])
+async def list_field_definitions(
+    entity_type: Optional[str] = None,
+    group: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List field definitions"""
+    try:
+        entity_type_filter = None
+        if entity_type:
+            entity_type_filter = CustomEntityType[entity_type.upper()]
+        
+        fields = system.custom_field_manager.list_fields(entity_type_filter, group, is_active)
+        
+        result = []
+        for field_def in fields:
+            result.append({
+                "id": field_def.id,
+                "name": field_def.name,
+                "label": field_def.label,
+                "description": field_def.description,
+                "field_type": field_def.field_type.value,
+                "entity_type": field_def.entity_type.value,
+                "is_required": field_def.is_required,
+                "is_active": field_def.is_active,
+                "group_name": field_def.group_name,
+                "created_at": field_def.created_at.isoformat()
+            })
+        
+        return {"fields": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/definitions/{field_id}", tags=["Custom Fields"])
+async def get_field_definition(
+    field_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get field definition"""
+    field_def = system.custom_field_manager.get_field(field_id)
+    if not field_def:
+        raise HTTPException(status_code=404, detail="Field definition not found")
+    
+    return {
+        "id": field_def.id,
+        "name": field_def.name,
+        "label": field_def.label,
+        "description": field_def.description,
+        "field_type": field_def.field_type.value,
+        "entity_type": field_def.entity_type.value,
+        "is_required": field_def.is_required,
+        "is_searchable": field_def.is_searchable,
+        "is_reportable": field_def.is_reportable,
+        "default_value": field_def.default_value,
+        "enum_values": field_def.enum_values,
+        "group_name": field_def.group_name,
+        "is_active": field_def.is_active,
+        "created_at": field_def.created_at.isoformat()
+    }
+
+
+@app.put("/custom-fields/definitions/{field_id}", tags=["Custom Fields"])
+async def update_field_definition(
+    field_id: str,
+    request: UpdateFieldRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Update field definition"""
+    try:
+        updates = {}
+        if request.label:
+            updates["label"] = request.label
+        if request.description:
+            updates["description"] = request.description
+        if request.is_required is not None:
+            updates["is_required"] = request.is_required
+        if request.is_searchable is not None:
+            updates["is_searchable"] = request.is_searchable
+        if request.is_reportable is not None:
+            updates["is_reportable"] = request.is_reportable
+        if request.default_value is not None:
+            updates["default_value"] = request.default_value
+        if request.enum_values is not None:
+            updates["enum_values"] = request.enum_values
+        if request.group_name is not None:
+            updates["group_name"] = request.group_name
+        
+        field_def = system.custom_field_manager.update_field(field_id, **updates)
+        return {"message": "Field definition updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/custom-fields/definitions/{field_id}", tags=["Custom Fields"])
+async def delete_field_definition(
+    field_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Delete field definition"""
+    try:
+        success = system.custom_field_manager.delete_field(field_id)
+        if success:
+            return {"message": "Field definition deleted successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Cannot delete field with existing values")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/custom-fields/definitions/{field_id}/activate", tags=["Custom Fields"])
+async def activate_field_definition(
+    field_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Activate field definition"""
+    try:
+        field_def = system.custom_field_manager.activate_field(field_id)
+        return {"message": "Field definition activated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/custom-fields/definitions/{field_id}/deactivate", tags=["Custom Fields"])
+async def deactivate_field_definition(
+    field_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Deactivate field definition"""
+    try:
+        field_def = system.custom_field_manager.deactivate_field(field_id)
+        return {"message": "Field definition deactivated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/custom-fields/values/{entity_type}/{entity_id}", tags=["Custom Fields"])
+async def set_field_value(
+    entity_type: str,
+    entity_id: str,
+    request: SetFieldValueRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Set field value"""
+    try:
+        field_value = system.custom_field_manager.set_value(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id,
+            field_name=request.field_name,
+            value=request.value,
+            updated_by="system"
+        )
+        
+        return {
+            "field_value_id": field_value.id,
+            "message": "Field value set successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/values/{entity_type}/{entity_id}", tags=["Custom Fields"])
+async def get_all_field_values(
+    entity_type: str,
+    entity_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get all field values for entity"""
+    try:
+        values = system.custom_field_manager.get_all_values(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id
+        )
+        
+        return {"values": values}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/values/{entity_type}/{entity_id}/{field_name}", tags=["Custom Fields"])
+async def get_field_value(
+    entity_type: str,
+    entity_id: str,
+    field_name: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Get single field value"""
+    try:
+        value = system.custom_field_manager.get_value(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id,
+            field_name=field_name
+        )
+        
+        return {"value": value}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/custom-fields/values/{entity_type}/{entity_id}/{field_name}", tags=["Custom Fields"])
+async def delete_field_value(
+    entity_type: str,
+    entity_id: str,
+    field_name: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Delete field value"""
+    try:
+        success = system.custom_field_manager.delete_value(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id,
+            field_name=field_name
+        )
+        
+        if success:
+            return {"message": "Field value deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Field value not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/custom-fields/values/{entity_type}/{entity_id}/bulk", tags=["Custom Fields"])
+async def bulk_set_field_values(
+    entity_type: str,
+    entity_id: str,
+    request: BulkSetValuesRequest,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Bulk set field values"""
+    try:
+        field_values = system.custom_field_manager.bulk_set_values(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id,
+            values_dict=request.values,
+            updated_by="system"
+        )
+        
+        return {
+            "count": len(field_values),
+            "message": "Field values set successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/search/{entity_type}", tags=["Custom Fields"])
+async def search_entities_by_field(
+    entity_type: str,
+    field_name: str,
+    value: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Search entities by field value"""
+    try:
+        entity_ids = system.custom_field_manager.search_entities(
+            entity_type=CustomEntityType[entity_type.upper()],
+            field_name=field_name,
+            value=value
+        )
+        
+        return {"entity_ids": entity_ids}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/custom-fields/export/{entity_type}", tags=["Custom Fields"])
+async def export_field_data(
+    entity_type: str,
+    field_names: Optional[str] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Export field data"""
+    try:
+        field_name_list = None
+        if field_names:
+            field_name_list = field_names.split(",")
+        
+        data = system.custom_field_manager.export_field_data(
+            entity_type=CustomEntityType[entity_type.upper()],
+            field_names=field_name_list
+        )
+        
+        return {"data": data}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/custom-fields/validate/{entity_type}/{entity_id}", tags=["Custom Fields"])
+async def validate_required_fields(
+    entity_type: str,
+    entity_id: str,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Validate required fields for entity"""
+    try:
+        is_valid, missing_fields = system.custom_field_manager.validate_all_required(
+            entity_type=CustomEntityType[entity_type.upper()],
+            entity_id=entity_id
+        )
+        
+        return {
+            "valid": is_valid,
+            "missing_fields": missing_fields
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # Run server function
