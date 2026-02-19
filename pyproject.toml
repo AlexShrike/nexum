@@ -1,13 +1,12 @@
-[tool.poetry]
+[project]
 name = "nexum"
 version = "1.0.0"
 description = "Nexum — Production-grade core banking system with double-entry ledger, configurable products, loans, credit lines, collections, compliance, workflows, RBAC, reporting, and Kafka integration."
-authors = ["AlexShrike <thet800@proton.me>"]
+authors = [{name = "AlexShrike", email = "thet800@proton.me"}]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/AlexShrike/nexum"
-repository = "https://github.com/AlexShrike/nexum"
-keywords = ["banking", "core-banking", "fintech", "ledger", "double-entry", "fraud-detection"]
+requires-python = ">=3.12,<4.0"
+keywords = ["banking", "core-banking", "fintech", "ledger", "double-entry"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
@@ -16,39 +15,34 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
-    "License :: OSI Approved :: MIT License",
 ]
-packages = [{include = "core_banking"}]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "PyJWT>=2.0.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<4.0"
-fastapi = ">=0.100.0"
-uvicorn = ">=0.20.0"
-pydantic = ">=2.0.0"
-PyJWT = ">=2.0.0"
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9.0", "asyncpg>=0.28.0"]
+kafka = ["confluent-kafka>=2.0.0"]
+encryption = ["cryptography>=3.4.0"]
+all = ["psycopg2-binary>=2.9.0", "asyncpg>=0.28.0", "confluent-kafka>=2.0.0", "cryptography>=3.4.0"]
+
+[project.scripts]
+nexum = "core_banking.api:run_server"
+
+[project.urls]
+Homepage = "https://github.com/AlexShrike/nexum"
+Repository = "https://github.com/AlexShrike/nexum"
+
+[tool.poetry]
+packages = [{include = "core_banking"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"
 httpx = ">=0.24.0"
-
-[tool.poetry.group.postgres.dependencies]
-psycopg2-binary = {version = ">=2.9.0", optional = true}
-asyncpg = {version = ">=0.28.0", optional = true}
-
-[tool.poetry.group.kafka.dependencies]
-confluent-kafka = {version = ">=2.0.0", optional = true}
-
-[tool.poetry.group.encryption.dependencies]
-cryptography = {version = ">=3.4.0", optional = true}
-
-[tool.poetry.extras]
-postgres = ["psycopg2-binary", "asyncpg"]
-kafka = ["confluent-kafka"]
-encryption = ["cryptography"]
-all = ["psycopg2-binary", "asyncpg", "confluent-kafka", "cryptography"]
-
-[tool.poetry.scripts]
-nexum = "core_banking.api:run_server"
 
 [build-system]
 requires = ["poetry-core"]
