@@ -31,7 +31,7 @@ venv\Scripts\activate
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
 
 ### 4. Configure Environment Variables (Optional)
@@ -108,7 +108,7 @@ export NEXUM_ENCRYPTION_SALT="custom-salt-for-key-derivation"
 - Store the master key securely (HSM, key vault, or encrypted config)
 - Never commit the master key to version control
 - If you lose the master key, encrypted data cannot be recovered
-- Use `cryptography` library: `pip install cryptography` or `pip install nexum[encryption]`
+- Use `cryptography` library: `poetry install -E encryption`
 
 #### Multi-Tenancy Configuration (Phase 2)
 
@@ -191,7 +191,7 @@ export NEXUM_DATABASE_URL="postgresql://nexum_user:your_secure_password@localhos
 #### Install PostgreSQL Driver
 
 ```bash
-pip install psycopg2-binary
+poetry install -E postgres
 ```
 
 ### 6. Database Migrations
@@ -358,8 +358,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies  
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml poetry.lock .
+RUN pip install poetry && poetry install --no-root
 
 # Copy application code
 COPY . .

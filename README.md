@@ -98,7 +98,7 @@ git clone https://github.com/AlexShrike/nexum
 cd nexum
 
 # Install dependencies
-pip install -r requirements.txt
+poetry install
 
 # Configure database (optional - defaults to SQLite)
 export NEXUM_DATABASE_URL="postgresql://user:pass@localhost/nexum"
