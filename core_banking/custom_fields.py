@@ -275,7 +275,7 @@ class CustomFieldManager:
     
     # Field definition management
     
-    def create_field(self, name: str, label: str, field_type: FieldType, entity_type: EntityType, **kwargs) -> FieldDefinition:
+    def create_field(self, name: str, label: str, description: str, field_type: FieldType, entity_type: EntityType, **kwargs) -> FieldDefinition:
         """Create a new field definition"""
         field_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
@@ -284,6 +284,7 @@ class CustomFieldManager:
             id=field_id,
             name=name,
             label=label,
+            description=description,
             field_type=field_type,
             entity_type=entity_type,
             created_at=now,
@@ -296,16 +297,32 @@ class CustomFieldManager:
         if existing:
             raise ValueError(f"Field '{name}' already exists for entity type '{entity_type.value}'")
         
+        # Convert to dict for storage
+        field_dict = field_def.to_dict()
+        # Convert enums to their values
+        field_dict['field_type'] = field_def.field_type.value
+        field_dict['entity_type'] = field_def.entity_type.value
+        # Convert validation rules to serializable format
+        if field_dict.get('validation_rules'):
+            field_dict['validation_rules'] = [
+                {
+                    'rule_type': rule.rule_type.value,
+                    'value': rule.value,
+                    'error_message': rule.error_message
+                }
+                for rule in field_def.validation_rules
+            ]
+        
         # Save to storage
-        self.storage.save(self._field_definitions_table, field_id, field_def.to_dict())
+        self.storage.save(self._field_definitions_table, field_id, field_dict)
         
         # Audit log
         if self.audit_manager:
             self.audit_manager.log_event(
-                event_type=AuditEventType.COMPLIANCE_CHECK,  # Using existing audit event type
+                event_type=AuditEventType.PRODUCT_CREATED,  # Using existing audit event type
                 entity_type="field_definition",
                 entity_id=field_id,
-                details={"action": "created", "field_name": name, "entity_type": entity_type.value}
+                metadata={"action": "created", "field_name": name, "entity_type": entity_type.value}
             )
         
         return field_def
@@ -413,16 +430,32 @@ class CustomFieldManager:
         
         field_def.updated_at = datetime.now(timezone.utc)
         
+        # Convert to dict for storage
+        field_dict = field_def.to_dict()
+        # Convert enums to their values
+        field_dict['field_type'] = field_def.field_type.value
+        field_dict['entity_type'] = field_def.entity_type.value
+        # Convert validation rules to serializable format
+        if field_dict.get('validation_rules'):
+            field_dict['validation_rules'] = [
+                {
+                    'rule_type': rule.rule_type.value,
+                    'value': rule.value,
+                    'error_message': rule.error_message
+                }
+                for rule in field_def.validation_rules
+            ]
+        
         # Save to storage
-        self.storage.save(self._field_definitions_table, field_id, field_def.to_dict())
+        self.storage.save(self._field_definitions_table, field_id, field_dict)
         
         # Audit log
         if self.audit_manager:
             self.audit_manager.log_event(
-                event_type=AuditEventType.COMPLIANCE_CHECK,
+                event_type=AuditEventType.PRODUCT_UPDATED,
                 entity_type="field_definition",
                 entity_id=field_id,
-                details={"action": "updated", "changes": list(kwargs.keys())}
+                metadata={"action": "updated", "changes": list(kwargs.keys())}
             )
         
         return field_def
@@ -449,10 +482,10 @@ class CustomFieldManager:
         # Audit log
         if success and self.audit_manager:
             self.audit_manager.log_event(
-                event_type=AuditEventType.COMPLIANCE_CHECK,
+                event_type=AuditEventType.SYSTEM_START,  # Using a generic system event
                 entity_type="field_definition",
                 entity_id=field_id,
-                details={"action": "deleted", "field_name": field_def.name}
+                metadata={"action": "deleted", "field_name": field_def.name}
             )
         
         return success
@@ -500,16 +533,21 @@ class CustomFieldManager:
                 updated_by=updated_by
             )
         
+        # Convert to dict for storage
+        value_dict = field_value.to_dict()
+        # Convert entity type to string
+        value_dict['entity_type'] = value_dict['entity_type'].value
+        
         # Save to storage
-        self.storage.save(self._field_values_table, field_value.id, field_value.to_dict())
+        self.storage.save(self._field_values_table, field_value.id, value_dict)
         
         # Audit log
         if self.audit_manager:
             self.audit_manager.log_event(
-                event_type=AuditEventType.COMPLIANCE_CHECK,
+                event_type=AuditEventType.ACCOUNT_UPDATED,  # Using a generic update event
                 entity_type="field_value",
                 entity_id=field_value.id,
-                details={
+                metadata={
                     "action": "set_value",
                     "field_name": field_name,
                     "entity_type": entity_type.value,
@@ -560,10 +598,10 @@ class CustomFieldManager:
         # Audit log
         if success and self.audit_manager:
             self.audit_manager.log_event(
-                event_type=AuditEventType.COMPLIANCE_CHECK,
+                event_type=AuditEventType.SYSTEM_START,  # Using a generic system event
                 entity_type="field_value",
                 entity_id=field_value.id,
-                details={
+                metadata={
                     "action": "deleted",
                     "field_name": field_name,
                     "entity_type": entity_type.value,

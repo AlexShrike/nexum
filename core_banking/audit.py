@@ -76,6 +76,23 @@ class AuditEventType(Enum):
     WORKFLOW_INSTANCE_CREATED = "workflow_instance_created"
     WORKFLOW_INSTANCE_UPDATED = "workflow_instance_updated"
     
+    # Custom field events
+    CUSTOM_FIELD_CREATED = "custom_field_created"
+    CUSTOM_FIELD_UPDATED = "custom_field_updated"
+    CUSTOM_FIELD_VALUE_SET = "custom_field_value_set"
+    COMPLIANCE_CHECK = "compliance_check"
+    
+    # RBAC events
+    USER_CREATED = "user_created"
+    USER_UPDATED = "user_updated"
+    USER_LOCKED = "user_locked"
+    USER_UNLOCKED = "user_unlocked"
+    ROLE_CREATED = "role_created"
+    ROLE_UPDATED = "role_updated"
+    LOGIN_SUCCESS = "login_success"
+    LOGIN_FAILED = "login_failed"
+    PASSWORD_CHANGED = "password_changed"
+    
     # System events
     SYSTEM_START = "system_start"
     SYSTEM_STOP = "system_stop"
