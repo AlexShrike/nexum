@@ -3011,6 +3011,194 @@ async def validate_required_fields(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# Kafka Integration Endpoints
+@app.post("/kafka/publish-test", tags=["Kafka Integration"])
+async def publish_test_event(
+    topic: str,
+    event_type: str,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    data: Optional[Dict[str, Any]] = None,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Publish a test event (development only)"""
+    try:
+        from .kafka_integration import EventSchema
+        import uuid
+        from datetime import datetime, timezone
+        
+        event = EventSchema(
+            event_id=str(uuid.uuid4()),
+            event_type=event_type,
+            timestamp=datetime.now(timezone.utc),
+            entity_type=entity_type,
+            entity_id=entity_id,
+            data=data or {},
+            metadata={"test": True}
+        )
+        
+        # Get event bus from system
+        event_bus = getattr(system, 'event_bus', None)
+        if not event_bus:
+            raise HTTPException(status_code=503, detail="Event bus not configured")
+        
+        event_bus.publish(topic, event)
+        
+        return {
+            "message": "Test event published successfully",
+            "event_id": event.event_id,
+            "topic": topic
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/kafka/status", tags=["Kafka Integration"])
+async def get_kafka_status(system: BankingSystem = Depends(get_banking_system)):
+    """Get event bus status"""
+    try:
+        event_bus = getattr(system, 'event_bus', None)
+        if not event_bus:
+            return {
+                "status": "not_configured",
+                "message": "Event bus not configured"
+            }
+        
+        status_info = {
+            "status": "running" if event_bus.is_running() else "stopped",
+            "type": type(event_bus).__name__
+        }
+        
+        # Add additional info for InMemoryEventBus
+        if hasattr(event_bus, 'get_events'):
+            events = event_bus.get_events()
+            status_info["total_events"] = len(events)
+            
+            # Count events by topic
+            topic_counts = {}
+            for topic, event, key in events:
+                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+            status_info["events_by_topic"] = topic_counts
+        
+        return status_info
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/kafka/events", tags=["Kafka Integration"])
+async def get_recent_events(
+    topic: Optional[str] = None,
+    limit: int = 50,
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """List recent events (for InMemoryEventBus only)"""
+    try:
+        event_bus = getattr(system, 'event_bus', None)
+        if not event_bus:
+            raise HTTPException(status_code=503, detail="Event bus not configured")
+        
+        if not hasattr(event_bus, 'get_events'):
+            raise HTTPException(
+                status_code=400, 
+                detail="Event listing only supported for InMemoryEventBus"
+            )
+        
+        events = event_bus.get_events(topic)
+        
+        # Convert to API-friendly format and limit results
+        result_events = []
+        for event_topic, event, key in events[-limit:]:
+            result_events.append({
+                "topic": event_topic,
+                "event_id": event.event_id,
+                "event_type": event.event_type,
+                "timestamp": event.timestamp.isoformat(),
+                "entity_type": event.entity_type,
+                "entity_id": event.entity_id,
+                "key": key,
+                "data": event.data
+            })
+        
+        return {
+            "events": result_events,
+            "total": len(events),
+            "showing": len(result_events)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/kafka/config", tags=["Kafka Integration"])
+async def configure_kafka(
+    bus_type: str,
+    bootstrap_servers: Optional[str] = None,
+    client_id: str = "nexum",
+    system: BankingSystem = Depends(get_banking_system)
+):
+    """Configure event bus"""
+    try:
+        from .kafka_integration import InMemoryEventBus, LogEventBus, KafkaEventBus
+        from .event_hooks import create_event_enabled_banking_system
+        
+        # Stop existing event bus if running
+        old_event_bus = getattr(system, 'event_bus', None)
+        if old_event_bus and old_event_bus.is_running():
+            old_event_bus.stop()
+        
+        # Create new event bus
+        if bus_type == "memory":
+            event_bus = InMemoryEventBus()
+        elif bus_type == "log":
+            event_bus = LogEventBus()
+        elif bus_type == "kafka":
+            if not bootstrap_servers:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="bootstrap_servers required for Kafka event bus"
+                )
+            event_bus = KafkaEventBus(bootstrap_servers, client_id)
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid bus_type. Use 'memory', 'log', or 'kafka'"
+            )
+        
+        # Set up event hooks
+        banking_components = {
+            'transaction_processor': system.transaction_processor,
+            'account_manager': system.account_manager,
+            'customer_manager': system.customer_manager,
+            'loan_manager': system.loan_manager,
+            'compliance_engine': system.compliance_engine,
+            'audit_trail': system.audit_trail
+        }
+        
+        # Add collections manager if it exists
+        if hasattr(system, 'collections_manager'):
+            banking_components['collections_manager'] = system.collections_manager
+        
+        # Add workflow engine if it exists
+        if hasattr(system, 'workflow_engine'):
+            banking_components['workflow_engine'] = system.workflow_engine
+        
+        hook_manager = create_event_enabled_banking_system(event_bus, banking_components)
+        
+        # Start the event bus
+        event_bus.start()
+        
+        # Store references on the system
+        system.event_bus = event_bus
+        system.event_hook_manager = hook_manager
+        
+        return {
+            "message": f"Event bus configured successfully",
+            "type": bus_type,
+            "status": "running" if event_bus.is_running() else "stopped"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # Run server function
 def run_server(host: str = "0.0.0.0", port: int = 8090, debug: bool = False):
     """Run the FastAPI server"""
