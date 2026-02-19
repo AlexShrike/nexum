@@ -2,15 +2,113 @@
 Admin endpoints (interest accrual, maintenance, etc.)
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from typing import Dict, Any
+from pydantic import BaseModel
 
 from .auth import BankingSystem, get_banking_system
+from ..config import get_config
+from ..encryption import (
+    is_encryption_available, create_encryption_provider, 
+    EncryptedStorage, KeyManager, PII_FIELDS
+)
 
 
 router = APIRouter()
 
 
-# Placeholder endpoints - to be filled in
+class KeyRotationRequest(BaseModel):
+    old_key: str
+    new_key: str
+
+
+@router.get("/encryption/status")
+async def get_encryption_status(system: BankingSystem = Depends(get_banking_system)) -> Dict[str, Any]:
+    """Get encryption status and configuration"""
+    config = get_config()
+    
+    # Check if encryption is available
+    crypto_available = is_encryption_available()
+    
+    # Determine actual provider based on config and availability
+    actual_provider = "noop"
+    if config.encryption_enabled and config.encryption_master_key and crypto_available:
+        actual_provider = config.encryption_provider
+    elif config.encryption_enabled and not crypto_available:
+        actual_provider = "noop (fallback - cryptography not available)"
+    
+    return {
+        "encryption_enabled": config.encryption_enabled,
+        "cryptography_available": crypto_available,
+        "configured_provider": config.encryption_provider,
+        "actual_provider": actual_provider,
+        "has_master_key": bool(config.encryption_master_key),
+        "pii_fields": PII_FIELDS
+    }
+
+
+@router.post("/encryption/rotate-key")
+async def rotate_encryption_key(
+    request: KeyRotationRequest,
+    system: BankingSystem = Depends(get_banking_system)
+) -> Dict[str, Any]:
+    """Trigger encryption key rotation (admin only)"""
+    config = get_config()
+    
+    if not config.encryption_enabled:
+        raise HTTPException(status_code=400, detail="Encryption is not enabled")
+    
+    if not is_encryption_available():
+        raise HTTPException(status_code=400, detail="Cryptography library not available")
+    
+    try:
+        # Create old and new providers
+        old_provider = create_encryption_provider(config.encryption_provider, request.old_key)
+        new_provider = create_encryption_provider(config.encryption_provider, request.new_key)
+        
+        # Get the current storage (assuming it's encrypted)
+        storage = system.storage
+        if not isinstance(storage, EncryptedStorage):
+            raise HTTPException(
+                status_code=400, 
+                detail="Storage is not configured for encryption"
+            )
+        
+        # Perform key rotation
+        key_manager = KeyManager(request.new_key)
+        stats = key_manager.rotate_key(storage, old_provider, new_provider)
+        
+        return {
+            "success": True,
+            "message": "Key rotation completed successfully",
+            "statistics": stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Key rotation failed: {str(e)}")
+
+
+@router.get("/encryption/audit")
+async def get_encryption_audit(system: BankingSystem = Depends(get_banking_system)) -> Dict[str, Any]:
+    """Get encryption/decryption statistics"""
+    storage = system.storage
+    
+    if isinstance(storage, EncryptedStorage):
+        stats = storage.get_encryption_stats()
+        return {
+            "encryption_statistics": stats,
+            "provider_type": type(storage.provider).__name__,
+            "pii_fields_configured": storage.pii_fields
+        }
+    else:
+        return {
+            "encryption_statistics": {"encrypt_count": 0, "decrypt_count": 0},
+            "provider_type": "none",
+            "message": "Storage is not configured for encryption"
+        }
+
+
+# Existing placeholder endpoints
 @router.post("/interest/accrue")
 async def run_interest_accrual(system: BankingSystem = Depends(get_banking_system)):
     """Run interest accrual process"""

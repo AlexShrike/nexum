@@ -49,6 +49,11 @@ class NexumConfig(BaseSettings):
     max_transaction_amount: str = "100000.00"
     interest_calculation_precision: int = 4
     
+    # Encryption configuration
+    encryption_enabled: bool = False  # Must opt-in
+    encryption_master_key: str = ""  # NEXUM_ENCRYPTION_MASTER_KEY env var
+    encryption_provider: str = "fernet"  # fernet, aesgcm, noop
+    
     # Feature flags
     enable_audit_logging: bool = True
     enable_kafka_events: bool = False
