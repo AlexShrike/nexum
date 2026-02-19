@@ -931,7 +931,16 @@ class RBACManager:
         return secrets.token_hex(16)
 
     def _hash_password(self, password: str, salt: str) -> str:
-        """Hash password with salt using SHA-256"""
+        """Hash password with salt using scrypt (more secure than SHA-256)"""
+        # Use scrypt for stronger password hashing
+        return hashlib.scrypt(
+            password.encode(), 
+            salt=salt.encode(), 
+            n=16384, r=8, p=1
+        ).hex()
+
+    def _hash_password_legacy(self, password: str, salt: str) -> str:
+        """Legacy SHA-256 password hashing for backward compatibility"""
         return hashlib.sha256((password + salt).encode()).hexdigest()
 
     def _set_user_password(self, user: User, password: str):
@@ -942,12 +951,24 @@ class RBACManager:
         user.password_hash = self._hash_password(password, user.password_salt)
 
     def _verify_password(self, user: User, password: str) -> bool:
-        """Verify password against stored hash"""
+        """Verify password against stored hash with legacy support"""
         if not user.password_hash or not user.password_salt:
             return False
 
-        expected_hash = self._hash_password(password, user.password_salt)
-        return user.password_hash == expected_hash
+        # Try new scrypt hashing first
+        expected_hash_new = self._hash_password(password, user.password_salt)
+        if user.password_hash == expected_hash_new:
+            return True
+            
+        # Fall back to legacy SHA-256 for existing passwords
+        expected_hash_legacy = self._hash_password_legacy(password, user.password_salt)
+        if user.password_hash == expected_hash_legacy:
+            # Re-hash with scrypt for security upgrade
+            self._set_user_password(user, password)
+            self.save_user(user)
+            return True
+            
+        return False
 
     def _generate_temp_password(self) -> str:
         """Generate temporary password"""

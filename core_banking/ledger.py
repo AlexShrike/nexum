@@ -257,19 +257,21 @@ class GeneralLedger:
         if not entry:
             raise ValueError(f"Journal entry {entry_id} not found")
         
-        entry.post()
-        self._save_entry(entry)
-        
-        # Log audit event
-        self.audit_trail.log_event(
-            event_type=AuditEventType.JOURNAL_ENTRY_POSTED,
-            entity_type="journal_entry",
-            entity_id=entry.id,
-            metadata={
-                "reference": entry.reference,
-                "posted_at": entry.posted_at.isoformat()
-            }
-        )
+        # Use atomic transaction to ensure all journal lines are posted together
+        with self.storage.atomic():
+            entry.post()
+            self._save_entry(entry)
+            
+            # Log audit event
+            self.audit_trail.log_event(
+                event_type=AuditEventType.JOURNAL_ENTRY_POSTED,
+                entity_type="journal_entry",
+                entity_id=entry.id,
+                metadata={
+                    "reference": entry.reference,
+                    "posted_at": entry.posted_at.isoformat()
+                }
+            )
         
         return entry
     

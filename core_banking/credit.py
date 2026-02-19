@@ -280,35 +280,37 @@ class CreditLineManager:
         if not payment_date:
             payment_date = date.today()
         
-        # Create payment transaction
-        payment_transaction = self.transaction_processor.create_transaction(
-            transaction_type=TransactionType.PAYMENT,
-            amount=amount,
-            description=f"Credit line payment",
-            channel=TransactionChannel.ONLINE,
-            to_account_id=account_id,  # Payment credits the account (reduces liability)
-            reference=f"PAY-{account_id}-{payment_date.strftime('%Y%m%d')}"
-        )
-        
-        # Process the transaction
-        processed_payment = self.transaction_processor.process_transaction(payment_transaction.id)
-        
-        # Record as credit transaction
-        self.process_credit_transaction(
-            account_id=account_id,
-            transaction_id=processed_payment.id,
-            category=TransactionCategory.PAYMENT,
-            amount=amount,
-            description="Payment received",
-            transaction_date=payment_date,
-            post_date=payment_date
-        )
-        
-        # Update grace period status
-        self.interest_engine.update_grace_period_status(account_id, amount, payment_date)
-        
-        # Update statement payment tracking
-        self._update_statement_payments(account_id, amount, payment_date)
+        # Use atomic transaction for payment processing
+        with self.storage.atomic():
+            # Create payment transaction
+            payment_transaction = self.transaction_processor.create_transaction(
+                transaction_type=TransactionType.PAYMENT,
+                amount=amount,
+                description=f"Credit line payment",
+                channel=TransactionChannel.ONLINE,
+                to_account_id=account_id,  # Payment credits the account (reduces liability)
+                reference=f"PAY-{account_id}-{payment_date.strftime('%Y%m%d')}"
+            )
+            
+            # Process the transaction
+            processed_payment = self.transaction_processor.process_transaction(payment_transaction.id)
+            
+            # Record as credit transaction
+            self.process_credit_transaction(
+                account_id=account_id,
+                transaction_id=processed_payment.id,
+                category=TransactionCategory.PAYMENT,
+                amount=amount,
+                description="Payment received",
+                transaction_date=payment_date,
+                post_date=payment_date
+            )
+            
+            # Update grace period status
+            self.interest_engine.update_grace_period_status(account_id, amount, payment_date)
+            
+            # Update statement payment tracking
+            self._update_statement_payments(account_id, amount, payment_date)
         
         return processed_payment.id
     

@@ -431,55 +431,57 @@ class LoanManager:
             if prepayment_amount.is_positive():
                 prepayment_penalty = prepayment_amount * penalty_rate
         
-        # Create payment transaction
-        payment_transaction = self.transaction_processor.create_transaction(
-            transaction_type=TransactionType.PAYMENT,
-            amount=payment_amount + late_fee + prepayment_penalty,
-            description=f"Loan payment",
-            channel=TransactionChannel.SYSTEM,
-            from_account_id=source_account_id,
-            to_account_id=loan.account_id,  # Payment credits the loan account (reduces liability)
-            reference=f"LOAN-PMT-{loan_id[:8]}"
-        )
-        
-        # Process transaction
-        processed_payment = self.transaction_processor.process_transaction(payment_transaction.id)
-        
-        # Create payment record
-        loan_payment = LoanPayment(
-            id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            loan_id=loan.id,
-            transaction_id=processed_payment.id,
-            payment_date=payment_date,
-            payment_amount=payment_amount,
-            principal_amount=min(principal_due, payment_amount),
-            interest_amount=min(interest_due, payment_amount),
-            late_fee=late_fee,
-            prepayment_penalty=prepayment_penalty
-        )
-        
-        # Save payment
-        self._save_payment(loan_payment)
-        
-        # Update loan balances
-        self._update_loan_after_payment(loan, loan_payment)
-        
-        # Log audit event
-        self.audit_trail.log_event(
-            event_type=AuditEventType.LOAN_PAYMENT_MADE,
-            entity_type="loan",
-            entity_id=loan.id,
-            metadata={
-                "payment_id": loan_payment.id,
-                "transaction_id": processed_payment.id,
-                "payment_amount": payment_amount.to_string(),
-                "principal_amount": loan_payment.principal_amount.to_string(),
-                "interest_amount": loan_payment.interest_amount.to_string(),
-                "remaining_balance": loan.current_balance.to_string()
-            }
-        )
+        # Use atomic transaction for payment processing
+        with self.storage.atomic():
+            # Create payment transaction
+            payment_transaction = self.transaction_processor.create_transaction(
+                transaction_type=TransactionType.PAYMENT,
+                amount=payment_amount + late_fee + prepayment_penalty,
+                description=f"Loan payment",
+                channel=TransactionChannel.SYSTEM,
+                from_account_id=source_account_id,
+                to_account_id=loan.account_id,  # Payment credits the loan account (reduces liability)
+                reference=f"LOAN-PMT-{loan_id[:8]}"
+            )
+            
+            # Process transaction
+            processed_payment = self.transaction_processor.process_transaction(payment_transaction.id)
+            
+            # Create payment record
+            loan_payment = LoanPayment(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+                loan_id=loan.id,
+                transaction_id=processed_payment.id,
+                payment_date=payment_date,
+                payment_amount=payment_amount,
+                principal_amount=min(principal_due, payment_amount),
+                interest_amount=min(interest_due, payment_amount),
+                late_fee=late_fee,
+                prepayment_penalty=prepayment_penalty
+            )
+            
+            # Save payment
+            self._save_payment(loan_payment)
+            
+            # Update loan balances
+            self._update_loan_after_payment(loan, loan_payment)
+            
+            # Log audit event
+            self.audit_trail.log_event(
+                event_type=AuditEventType.LOAN_PAYMENT_MADE,
+                entity_type="loan",
+                entity_id=loan.id,
+                metadata={
+                    "payment_id": loan_payment.id,
+                    "transaction_id": processed_payment.id,
+                    "payment_amount": payment_amount.to_string(),
+                    "principal_amount": loan_payment.principal_amount.to_string(),
+                    "interest_amount": loan_payment.interest_amount.to_string(),
+                    "remaining_balance": loan.current_balance.to_string()
+                }
+            )
         
         return loan_payment
     

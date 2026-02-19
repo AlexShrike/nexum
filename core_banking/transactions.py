@@ -22,6 +22,7 @@ from .accounts import ProductType
 from .accounts import AccountManager, Account
 from .customers import CustomerManager
 from .compliance import ComplianceEngine, ComplianceAction
+from .logging_config import get_logger, log_action
 
 
 class TransactionType(Enum):
@@ -157,6 +158,7 @@ class TransactionProcessor:
         self.compliance_engine = compliance_engine
         self.audit_trail = audit_trail
         self.table_name = "transactions"
+        self.logger = get_logger("nexum.transactions")
         
         # System accounts for external transactions
         self._system_accounts = {
@@ -232,6 +234,22 @@ class TransactionProcessor:
         # Save transaction
         self._save_transaction(transaction)
         
+        # Log transaction creation
+        log_action(
+            self.logger, "info", f"Transaction created: {transaction_type.value}",
+            action="create_transaction", resource=f"transaction:{transaction.id}",
+            extra={
+                "transaction_id": transaction.id,
+                "transaction_type": transaction_type.value,
+                "amount": amount.to_string(),
+                "from_account": from_account_id,
+                "to_account": to_account_id,
+                "reference": reference,
+                "channel": channel.value,
+                "idempotency_key": idempotency_key
+            }
+        )
+        
         # Log audit event
         self.audit_trail.log_event(
             event_type=AuditEventType.TRANSACTION_CREATED,
@@ -269,59 +287,61 @@ class TransactionProcessor:
         if not transaction.is_pending:
             raise ValueError(f"Transaction {transaction_id} is not in PENDING state")
         
-        try:
-            # Update state to processing
-            transaction.state = TransactionState.PROCESSING
-            transaction.updated_at = datetime.now(timezone.utc)
-            self._save_transaction(transaction)
-            
-            # Run compliance checks (skip for system transactions and reversals)
-            if (not transaction.compliance_checked and 
-                transaction.channel != TransactionChannel.SYSTEM and
-                transaction.transaction_type != TransactionType.REVERSAL):
-                self._run_compliance_checks(transaction)
-            elif transaction.channel == TransactionChannel.SYSTEM or transaction.transaction_type == TransactionType.REVERSAL:
-                # System transactions and reversals are automatically allowed
-                transaction.compliance_checked = True
-                transaction.compliance_action = ComplianceAction.ALLOW
-            
-            # If blocked by compliance, fail the transaction
-            if transaction.compliance_action == ComplianceAction.BLOCK:
-                self._fail_transaction(transaction, "Blocked by compliance rules")
-                raise ValueError("Blocked by compliance rules")
-            
-            # Validate accounts
-            self._validate_transaction_accounts(transaction)
-            
-            # Create journal entry
-            journal_entry = self._create_journal_entry(transaction)
-            
-            # Post journal entry
-            posted_entry = self.ledger.post_journal_entry(journal_entry.id)
-            
-            # Complete transaction
-            transaction.journal_entry_id = posted_entry.id
-            transaction.state = TransactionState.COMPLETED
-            transaction.processed_at = datetime.now(timezone.utc)
-            transaction.updated_at = transaction.processed_at
-            
-            self._save_transaction(transaction)
-            
-            # Log audit event
-            self.audit_trail.log_event(
-                event_type=AuditEventType.TRANSACTION_POSTED,
-                entity_type="transaction",
-                entity_id=transaction.id,
-                metadata={
-                    "journal_entry_id": journal_entry.id,
-                    "processed_at": transaction.processed_at.isoformat()
-                }
-            )
-            
-        except Exception as e:
-            # Handle processing failure
-            self._fail_transaction(transaction, str(e))
-            raise
+        # Use atomic transaction to ensure all operations succeed or fail together
+        with self.storage.atomic():
+            try:
+                # Update state to processing
+                transaction.state = TransactionState.PROCESSING
+                transaction.updated_at = datetime.now(timezone.utc)
+                self._save_transaction(transaction)
+                
+                # Run compliance checks (skip for system transactions and reversals)
+                if (not transaction.compliance_checked and 
+                    transaction.channel != TransactionChannel.SYSTEM and
+                    transaction.transaction_type != TransactionType.REVERSAL):
+                    self._run_compliance_checks(transaction)
+                elif transaction.channel == TransactionChannel.SYSTEM or transaction.transaction_type == TransactionType.REVERSAL:
+                    # System transactions and reversals are automatically allowed
+                    transaction.compliance_checked = True
+                    transaction.compliance_action = ComplianceAction.ALLOW
+                
+                # If blocked by compliance, fail the transaction
+                if transaction.compliance_action == ComplianceAction.BLOCK:
+                    self._fail_transaction(transaction, "Blocked by compliance rules")
+                    raise ValueError("Blocked by compliance rules")
+                
+                # Validate accounts
+                self._validate_transaction_accounts(transaction)
+                
+                # Create journal entry
+                journal_entry = self._create_journal_entry(transaction)
+                
+                # Post journal entry
+                posted_entry = self.ledger.post_journal_entry(journal_entry.id)
+                
+                # Complete transaction
+                transaction.journal_entry_id = posted_entry.id
+                transaction.state = TransactionState.COMPLETED
+                transaction.processed_at = datetime.now(timezone.utc)
+                transaction.updated_at = transaction.processed_at
+                
+                self._save_transaction(transaction)
+                
+                # Log audit event
+                self.audit_trail.log_event(
+                    event_type=AuditEventType.TRANSACTION_POSTED,
+                    entity_type="transaction",
+                    entity_id=transaction.id,
+                    metadata={
+                        "journal_entry_id": journal_entry.id,
+                        "processed_at": transaction.processed_at.isoformat()
+                    }
+                )
+                
+            except Exception as e:
+                # Handle processing failure
+                self._fail_transaction(transaction, str(e))
+                raise
         
         return transaction
     
