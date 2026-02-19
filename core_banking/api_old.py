@@ -430,6 +430,45 @@ class BulkSetValuesRequest(BaseModel):
     values: Dict[str, Any]
 
 
+# Notification API Models
+class NotificationTemplateRequest(BaseModel):
+    name: str
+    notification_type: str = Field(..., description="Notification type")
+    channel: str = Field(..., description="Channel (email, sms, push, webhook, in_app)")
+    subject_template: str = Field(..., description="Subject template with {placeholders}")
+    body_template: str = Field(..., description="Body template with {placeholders}")
+    is_active: bool = True
+
+
+class SendNotificationRequest(BaseModel):
+    notification_type: str = Field(..., description="Notification type")
+    recipient_id: str = Field(..., description="Recipient customer/user ID")
+    data: Dict[str, Any] = Field(..., description="Template data for rendering")
+    channels: Optional[List[str]] = Field(None, description="Specific channels to use")
+    priority: str = Field("medium", description="Priority (low, medium, high, critical)")
+
+
+class BulkNotificationRequest(BaseModel):
+    notification_type: str = Field(..., description="Notification type")
+    recipient_ids: List[str] = Field(..., description="List of recipient IDs")
+    data: Dict[str, Any] = Field(..., description="Template data for rendering")
+    channels: Optional[List[str]] = Field(None, description="Specific channels to use")
+
+
+class NotificationPreferencesRequest(BaseModel):
+    channel_preferences: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Mapping of notification type to preferred channels"
+    )
+    quiet_hours_start: Optional[str] = Field(None, description="Quiet hours start time (HH:MM)")
+    quiet_hours_end: Optional[str] = Field(None, description="Quiet hours end time (HH:MM)")
+    do_not_disturb: bool = False
+
+
+class RetryFailedRequest(BaseModel):
+    max_retries: int = Field(3, description="Maximum retry attempts")
+
+
 # Import new modules
 from .products import ProductEngine, Product, ProductStatus, ProductType as ProductEngineType
 from .collections import CollectionsManager, DelinquencyStatus, CollectionAction, ActionResult
@@ -437,6 +476,7 @@ from .reporting import ReportingEngine, ReportType, ReportFormat
 from .workflows import WorkflowEngine, WorkflowType, WorkflowStatus, StepStatus
 from .rbac import RBACManager, Permission, Role as RBACRole
 from .custom_fields import CustomFieldManager, FieldType, EntityType as CustomEntityType
+from .notifications import NotificationEngine, NotificationChannel, NotificationPriority, NotificationType, NotificationPreference
 
 
 # Banking System Context
@@ -486,6 +526,7 @@ class BankingSystem:
         self.workflow_engine = WorkflowEngine(self.storage, self.audit_trail)
         self.rbac_manager = RBACManager(self.storage, self.audit_trail)
         self.custom_field_manager = CustomFieldManager(self.storage, self.audit_trail)
+        self.notification_engine = NotificationEngine(self.storage, self.audit_trail)
 
 
 # Global banking system instance
@@ -3324,6 +3365,652 @@ async def configure_kafka(
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# Notification Engine Endpoints
+
+@app.post("/notifications/send", tags=["Notifications"])
+async def send_notification(
+    request: SendNotificationRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Send a notification to a recipient"""
+    try:
+        # Convert string enums
+        notification_type = NotificationType(request.notification_type)
+        priority = NotificationPriority(request.priority)
+        channels = None
+        if request.channels:
+            channels = [NotificationChannel(ch) for ch in request.channels]
+        
+        # Send notification
+        notification_ids = await system.notification_engine.send_notification(
+            notification_type=notification_type,
+            recipient_id=request.recipient_id,
+            data=request.data,
+            channels=channels,
+            priority=priority
+        )
+        
+        return {
+            "message": "Notification sent successfully",
+            "notification_ids": notification_ids,
+            "sent_count": len(notification_ids)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/notifications/send/bulk", tags=["Notifications"])
+async def send_bulk_notifications(
+    request: BulkNotificationRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Send bulk notifications to multiple recipients"""
+    try:
+        notification_type = NotificationType(request.notification_type)
+        channels = None
+        if request.channels:
+            channels = [NotificationChannel(ch) for ch in request.channels]
+        
+        results = await system.notification_engine.send_bulk(
+            notification_type=notification_type,
+            recipient_ids=request.recipient_ids,
+            data=request.data,
+            channels=channels
+        )
+        
+        total_sent = sum(len(sent_ids) for sent_ids in results.values())
+        
+        return {
+            "message": "Bulk notifications processed",
+            "results": results,
+            "total_recipients": len(request.recipient_ids),
+            "total_sent": total_sent
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/notifications/{recipient_id}", tags=["Notifications"])
+async def get_notifications(
+    recipient_id: str,
+    status: Optional[str] = None,
+    limit: int = 50,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Get notifications for a recipient"""
+    try:
+        notification_status = None
+        if status:
+            from .notifications import NotificationStatus
+            notification_status = NotificationStatus(status)
+        
+        notifications = system.notification_engine.get_notifications(
+            recipient_id=recipient_id,
+            status=notification_status,
+            limit=limit
+        )
+        
+        # Convert to API format
+        notifications_data = []
+        for notification in notifications:
+            data = {
+                "id": notification.id,
+                "created_at": notification.created_at.isoformat(),
+                "notification_type": notification.notification_type.value,
+                "channel": notification.channel.value,
+                "priority": notification.priority.value,
+                "recipient_id": notification.recipient_id,
+                "subject": notification.subject,
+                "body": notification.body,
+                "status": notification.status.value,
+                "sent_at": notification.sent_at.isoformat() if notification.sent_at else None,
+                "delivered_at": notification.delivered_at.isoformat() if notification.delivered_at else None,
+                "read_at": notification.read_at.isoformat() if notification.read_at else None,
+                "failed_reason": notification.failed_reason,
+                "retry_count": notification.retry_count,
+                "metadata": notification.metadata
+            }
+            notifications_data.append(data)
+        
+        return {
+            "notifications": notifications_data,
+            "count": len(notifications_data)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/notifications/{notification_id}/read", tags=["Notifications"])
+async def mark_notification_as_read(
+    notification_id: str,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Mark notification as read"""
+    try:
+        success = system.notification_engine.mark_as_read(notification_id)
+        
+        if success:
+            return {"message": "Notification marked as read"}
+        else:
+            raise HTTPException(status_code=404, detail="Notification not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/notifications/{recipient_id}/unread-count", tags=["Notifications"])
+async def get_unread_count(
+    recipient_id: str,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Get unread notification count for recipient"""
+    try:
+        count = system.notification_engine.get_unread_count(recipient_id)
+        return {"unread_count": count}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/notifications/templates", tags=["Notifications"])
+async def create_notification_template(
+    request: NotificationTemplateRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Create a new notification template"""
+    try:
+        from .notifications import NotificationTemplate
+        
+        template = NotificationTemplate(
+            id=None,  # Will be generated
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            name=request.name,
+            notification_type=NotificationType(request.notification_type),
+            channel=NotificationChannel(request.channel),
+            subject_template=request.subject_template,
+            body_template=request.body_template,
+            is_active=request.is_active
+        )
+        
+        template_id = system.notification_engine.create_template(template)
+        
+        return {
+            "message": "Template created successfully",
+            "template_id": template_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/notifications/templates", tags=["Notifications"])
+async def list_notification_templates(
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """List all notification templates"""
+    try:
+        templates = system.notification_engine.list_templates()
+        
+        templates_data = []
+        for template in templates:
+            data = {
+                "id": template.id,
+                "created_at": template.created_at.isoformat(),
+                "name": template.name,
+                "notification_type": template.notification_type.value,
+                "channel": template.channel.value,
+                "subject_template": template.subject_template,
+                "body_template": template.body_template,
+                "is_active": template.is_active
+            }
+            templates_data.append(data)
+        
+        return {
+            "templates": templates_data,
+            "count": len(templates_data)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/notifications/retry-failed", tags=["Notifications"])
+async def retry_failed_notifications(
+    request: RetryFailedRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Retry failed notifications"""
+    try:
+        results = await system.notification_engine.retry_failed(request.max_retries)
+        
+        return {
+            "message": "Failed notification retry completed",
+            "attempted": results["attempted"],
+            "succeeded": results["succeeded"],
+            "failed": results["failed"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/notifications/stats", tags=["Notifications"])
+async def get_notification_stats(
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Get notification delivery statistics"""
+    try:
+        stats = system.notification_engine.get_delivery_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/notifications/preferences/{customer_id}", tags=["Notifications"])
+async def set_notification_preferences(
+    customer_id: str,
+    request: NotificationPreferencesRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Set notification preferences for a customer"""
+    try:
+        from datetime import time
+        
+        # Convert channel preferences
+        channel_preferences = {}
+        for notif_type_str, channels_list in request.channel_preferences.items():
+            try:
+                notif_type = NotificationType(notif_type_str)
+                channels = [NotificationChannel(ch) for ch in channels_list]
+                channel_preferences[notif_type] = channels
+            except ValueError:
+                continue  # Skip invalid types/channels
+        
+        # Parse quiet hours
+        quiet_hours_start = None
+        quiet_hours_end = None
+        if request.quiet_hours_start:
+            hour, minute = map(int, request.quiet_hours_start.split(':'))
+            quiet_hours_start = time(hour, minute)
+        if request.quiet_hours_end:
+            hour, minute = map(int, request.quiet_hours_end.split(':'))
+            quiet_hours_end = time(hour, minute)
+        
+        preferences = NotificationPreference(
+            id=customer_id,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            customer_id=customer_id,
+            channel_preferences=channel_preferences,
+            quiet_hours_start=quiet_hours_start,
+            quiet_hours_end=quiet_hours_end,
+            do_not_disturb=request.do_not_disturb
+        )
+        
+        system.notification_engine.set_preferences(customer_id, preferences)
+        
+        return {"message": "Notification preferences updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/notifications/preferences/{customer_id}", tags=["Notifications"])
+async def get_notification_preferences(
+    customer_id: str,
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(get_current_user)
+):
+    """Get notification preferences for a customer"""
+    try:
+        preferences = system.notification_engine.get_preferences(customer_id)
+        
+        if not preferences:
+            return {"preferences": None}
+        
+        # Convert to API format
+        channel_prefs = {}
+        for notif_type, channels in preferences.channel_preferences.items():
+            channel_prefs[notif_type.value] = [ch.value for ch in channels]
+        
+        data = {
+            "customer_id": preferences.customer_id,
+            "channel_preferences": channel_prefs,
+            "quiet_hours_start": preferences.quiet_hours_start.isoformat() if preferences.quiet_hours_start else None,
+            "quiet_hours_end": preferences.quiet_hours_end.isoformat() if preferences.quiet_hours_end else None,
+            "do_not_disturb": preferences.do_not_disturb
+        }
+        
+        return {"preferences": data}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ===============================
+# MULTI-TENANCY API ENDPOINTS
+# ===============================
+
+# Import tenancy components
+from .tenancy import (
+    TenantManager, TenantAwareStorage, Tenant, SubscriptionTier, 
+    TenantStats, TenantMiddleware, tenant_middleware_func
+)
+
+# Tenant API Models
+class CreateTenantRequest(BaseModel):
+    name: str = Field(..., description="Tenant name")
+    code: str = Field(..., description="Unique tenant code (e.g., ACME_BANK)")
+    display_name: str = Field(..., description="Display name for the tenant")
+    description: str = Field("", description="Tenant description")
+    settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Tenant-specific settings")
+    database_schema: Optional[str] = Field(None, description="Database schema for schema-per-tenant isolation")
+    max_users: Optional[int] = Field(None, description="Maximum users quota")
+    max_accounts: Optional[int] = Field(None, description="Maximum accounts quota")
+    subscription_tier: str = Field("free", description="Subscription tier (free, basic, professional, enterprise)")
+    contact_email: Optional[str] = Field(None, description="Contact email")
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
+    logo_url: Optional[str] = Field(None, description="Logo URL")
+    primary_color: Optional[str] = Field(None, description="Primary color (hex)")
+
+class UpdateTenantRequest(BaseModel):
+    name: Optional[str] = Field(None, description="Tenant name")
+    display_name: Optional[str] = Field(None, description="Display name")
+    description: Optional[str] = Field(None, description="Tenant description")
+    settings: Optional[Dict[str, Any]] = Field(None, description="Tenant-specific settings")
+    database_schema: Optional[str] = Field(None, description="Database schema")
+    max_users: Optional[int] = Field(None, description="Maximum users quota")
+    max_accounts: Optional[int] = Field(None, description="Maximum accounts quota")
+    subscription_tier: Optional[str] = Field(None, description="Subscription tier")
+    contact_email: Optional[str] = Field(None, description="Contact email")
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
+    logo_url: Optional[str] = Field(None, description="Logo URL")
+    primary_color: Optional[str] = Field(None, description="Primary color (hex)")
+
+class TenantResponse(BaseModel):
+    id: str
+    name: str
+    code: str
+    display_name: str
+    description: str
+    is_active: bool
+    created_at: str
+    updated_at: str
+    settings: Dict[str, Any]
+    database_schema: Optional[str]
+    max_users: Optional[int]
+    max_accounts: Optional[int]
+    subscription_tier: str
+    contact_email: Optional[str]
+    contact_phone: Optional[str]
+    logo_url: Optional[str]
+    primary_color: Optional[str]
+
+class TenantStatsResponse(BaseModel):
+    tenant_id: str
+    user_count: int
+    account_count: int
+    transaction_count: int
+    total_balance: str
+    last_activity: Optional[str]
+
+# Initialize tenant manager
+def get_tenant_manager() -> TenantManager:
+    """Get or create tenant manager"""
+    if not hasattr(banking_system, '_tenant_manager'):
+        banking_system._tenant_manager = TenantManager(banking_system.storage)
+    return banking_system._tenant_manager
+
+# Tenant Management Endpoints
+@app.post("/tenants", status_code=status.HTTP_201_CREATED, response_model=TenantResponse, tags=["Tenants"])
+async def create_tenant(
+    request: CreateTenantRequest,
+    system: BankingSystem = Depends(get_banking_system),
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Create a new tenant (super-admin only)"""
+    try:
+        # Parse subscription tier
+        subscription_tier = SubscriptionTier(request.subscription_tier.lower())
+        
+        tenant = tenant_manager.create_tenant(
+            name=request.name,
+            code=request.code,
+            display_name=request.display_name,
+            description=request.description,
+            settings=request.settings,
+            database_schema=request.database_schema,
+            max_users=request.max_users,
+            max_accounts=request.max_accounts,
+            subscription_tier=subscription_tier,
+            contact_email=request.contact_email,
+            contact_phone=request.contact_phone,
+            logo_url=request.logo_url,
+            primary_color=request.primary_color
+        )
+        
+        # Convert to response model
+        return TenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            code=tenant.code,
+            display_name=tenant.display_name,
+            description=tenant.description,
+            is_active=tenant.is_active,
+            created_at=tenant.created_at.isoformat(),
+            updated_at=tenant.updated_at.isoformat(),
+            settings=tenant.settings,
+            database_schema=tenant.database_schema,
+            max_users=tenant.max_users,
+            max_accounts=tenant.max_accounts,
+            subscription_tier=tenant.subscription_tier.value,
+            contact_email=tenant.contact_email,
+            contact_phone=tenant.contact_phone,
+            logo_url=tenant.logo_url,
+            primary_color=tenant.primary_color
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create tenant: {str(e)}")
+
+@app.get("/tenants", response_model=List[TenantResponse], tags=["Tenants"])
+async def list_tenants(
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """List all tenants (super-admin only)"""
+    try:
+        tenants = tenant_manager.list_tenants(is_active=is_active)
+        
+        return [
+            TenantResponse(
+                id=tenant.id,
+                name=tenant.name,
+                code=tenant.code,
+                display_name=tenant.display_name,
+                description=tenant.description,
+                is_active=tenant.is_active,
+                created_at=tenant.created_at.isoformat(),
+                updated_at=tenant.updated_at.isoformat(),
+                settings=tenant.settings,
+                database_schema=tenant.database_schema,
+                max_users=tenant.max_users,
+                max_accounts=tenant.max_accounts,
+                subscription_tier=tenant.subscription_tier.value,
+                contact_email=tenant.contact_email,
+                contact_phone=tenant.contact_phone,
+                logo_url=tenant.logo_url,
+                primary_color=tenant.primary_color
+            )
+            for tenant in tenants
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to list tenants: {str(e)}")
+
+@app.get("/tenants/{tenant_id}", response_model=TenantResponse, tags=["Tenants"])
+async def get_tenant(
+    tenant_id: str,
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Get tenant by ID (super-admin only)"""
+    try:
+        tenant = tenant_manager.get_tenant(tenant_id)
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        return TenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            code=tenant.code,
+            display_name=tenant.display_name,
+            description=tenant.description,
+            is_active=tenant.is_active,
+            created_at=tenant.created_at.isoformat(),
+            updated_at=tenant.updated_at.isoformat(),
+            settings=tenant.settings,
+            database_schema=tenant.database_schema,
+            max_users=tenant.max_users,
+            max_accounts=tenant.max_accounts,
+            subscription_tier=tenant.subscription_tier.value,
+            contact_email=tenant.contact_email,
+            contact_phone=tenant.contact_phone,
+            logo_url=tenant.logo_url,
+            primary_color=tenant.primary_color
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get tenant: {str(e)}")
+
+@app.put("/tenants/{tenant_id}", response_model=TenantResponse, tags=["Tenants"])
+async def update_tenant(
+    tenant_id: str,
+    request: UpdateTenantRequest,
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Update tenant (super-admin only)"""
+    try:
+        # Build update dict with only provided fields
+        update_fields = {}
+        for field, value in request.dict(exclude_unset=True).items():
+            if field == 'subscription_tier' and value:
+                update_fields[field] = SubscriptionTier(value.lower())
+            else:
+                update_fields[field] = value
+        
+        tenant = tenant_manager.update_tenant(tenant_id, **update_fields)
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        return TenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            code=tenant.code,
+            display_name=tenant.display_name,
+            description=tenant.description,
+            is_active=tenant.is_active,
+            created_at=tenant.created_at.isoformat(),
+            updated_at=tenant.updated_at.isoformat(),
+            settings=tenant.settings,
+            database_schema=tenant.database_schema,
+            max_users=tenant.max_users,
+            max_accounts=tenant.max_accounts,
+            subscription_tier=tenant.subscription_tier.value,
+            contact_email=tenant.contact_email,
+            contact_phone=tenant.contact_phone,
+            logo_url=tenant.logo_url,
+            primary_color=tenant.primary_color
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update tenant: {str(e)}")
+
+@app.post("/tenants/{tenant_id}/activate", tags=["Tenants"])
+async def activate_tenant(
+    tenant_id: str,
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Activate a tenant (super-admin only)"""
+    try:
+        success = tenant_manager.activate_tenant(tenant_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        return {"message": "Tenant activated successfully", "tenant_id": tenant_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to activate tenant: {str(e)}")
+
+@app.post("/tenants/{tenant_id}/deactivate", tags=["Tenants"])
+async def deactivate_tenant(
+    tenant_id: str,
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Deactivate a tenant (super-admin only)"""
+    try:
+        success = tenant_manager.deactivate_tenant(tenant_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        return {"message": "Tenant deactivated successfully", "tenant_id": tenant_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to deactivate tenant: {str(e)}")
+
+@app.get("/tenants/{tenant_id}/stats", response_model=TenantStatsResponse, tags=["Tenants"])
+async def get_tenant_stats(
+    tenant_id: str,
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    system: BankingSystem = Depends(get_banking_system),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Get usage statistics for a tenant (super-admin only)"""
+    try:
+        stats = tenant_manager.get_tenant_stats(tenant_id, system)
+        if not stats:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        return TenantStatsResponse(
+            tenant_id=stats.tenant_id,
+            user_count=stats.user_count,
+            account_count=stats.account_count,
+            transaction_count=stats.transaction_count,
+            total_balance=str(stats.total_balance),
+            last_activity=stats.last_activity.isoformat() if stats.last_activity else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get tenant stats: {str(e)}")
+
+@app.get("/tenants/usage-report", response_model=List[TenantStatsResponse], tags=["Tenants"])
+async def get_usage_report(
+    tenant_manager: TenantManager = Depends(get_tenant_manager),
+    current_user: str = Depends(require_permission("ADMIN"))
+):
+    """Get usage report for all active tenants (super-admin only)"""
+    try:
+        report = tenant_manager.get_usage_report()
+        
+        return [
+            TenantStatsResponse(
+                tenant_id=stats.tenant_id,
+                user_count=stats.user_count,
+                account_count=stats.account_count,
+                transaction_count=stats.transaction_count,
+                total_balance=str(stats.total_balance),
+                last_activity=stats.last_activity.isoformat() if stats.last_activity else None
+            )
+            for stats in report
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get usage report: {str(e)}")
 
 
 # Run server function

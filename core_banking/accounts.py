@@ -18,6 +18,14 @@ from .storage import StorageInterface, StorageRecord
 from .audit import AuditTrail, AuditEventType
 from .ledger import GeneralLedger, AccountType
 
+# Import events for Phase 2 observer pattern (optional)
+try:
+    from .events import EventDispatcher, DomainEvent, create_account_event
+except ImportError:
+    EventDispatcher = None
+    DomainEvent = None
+    create_account_event = None
+
 
 class ProductType(Enum):
     """Banking product types"""
@@ -143,13 +151,27 @@ class AccountManager:
         self,
         storage: StorageInterface,
         ledger: GeneralLedger,
-        audit_trail: AuditTrail
+        audit_trail: AuditTrail,
+        event_dispatcher: Optional['EventDispatcher'] = None
     ):
         self.storage = storage
         self.ledger = ledger  
         self.audit_trail = audit_trail
         self.accounts_table = "accounts"
         self.holds_table = "account_holds"
+        
+        # Event dispatcher for publishing domain events (Phase 2)
+        self._event_dispatcher = event_dispatcher
+    
+    def _publish_event(self, event_type, account: Account) -> None:
+        """Publish a domain event if event dispatcher is available"""
+        if self._event_dispatcher and create_account_event and event_type:
+            try:
+                event = create_account_event(event_type, account)
+                self._event_dispatcher.publish(event)
+            except Exception as e:
+                # Log but don't fail the operation
+                pass
     
     def create_account(
         self,
@@ -232,6 +254,10 @@ class AccountManager:
             }
         )
         
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.ACCOUNT_CREATED, account)
+        
         return account
     
     def get_account(self, account_id: str) -> Optional[Account]:
@@ -285,6 +311,14 @@ class AccountManager:
                 "reason": reason
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            event_type_mapping = {
+                AccountState.CLOSED: DomainEvent.ACCOUNT_CLOSED,
+            }
+            domain_event = event_type_mapping.get(new_state, DomainEvent.ACCOUNT_UPDATED)
+            self._publish_event(domain_event, account)
         
         return account
     

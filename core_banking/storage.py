@@ -654,3 +654,386 @@ class StorageManager:
     def close(self) -> None:
         """Close storage backend"""
         self.storage.close()
+
+
+# =============================================================================
+# ASYNC STORAGE INTERFACES (Phase 2)
+# =============================================================================
+
+from abc import abstractmethod
+from contextlib import asynccontextmanager
+from typing import AsyncContextManager
+
+
+class AsyncStorageInterface(ABC):
+    """Abstract async interface for storage backends (Phase 2)"""
+    
+    @abstractmethod
+    async def save(self, table: str, record_id: str, data: Dict[str, Any]) -> None:
+        """Save a record to storage asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def load(self, table: str, record_id: str) -> Optional[Dict[str, Any]]:
+        """Load a record from storage asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def load_all(self, table: str) -> List[Dict[str, Any]]:
+        """Load all records from a table asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def delete(self, table: str, record_id: str) -> bool:
+        """Delete a record from storage asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def exists(self, table: str, record_id: str) -> bool:
+        """Check if a record exists asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def find(self, table: str, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Find records matching filters asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def count(self, table: str) -> int:
+        """Count records in table asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def clear_table(self, table: str) -> None:
+        """Clear all records from a table asynchronously"""
+        pass
+    
+    @abstractmethod
+    async def close(self) -> None:
+        """Close storage connection asynchronously"""
+        pass
+    
+    async def begin_transaction(self) -> None:
+        """Start a database transaction asynchronously (default no-op)"""
+        pass
+    
+    async def commit(self) -> None:
+        """Commit current transaction asynchronously (default no-op)"""
+        pass
+    
+    async def rollback(self) -> None:
+        """Rollback current transaction asynchronously (default no-op)"""
+        pass
+    
+    @asynccontextmanager
+    async def atomic(self) -> AsyncContextManager[None]:
+        """Async context manager for atomic operations"""
+        await self.begin_transaction()
+        try:
+            yield
+            await self.commit()
+        except Exception:
+            await self.rollback()
+            raise
+
+
+class AsyncPostgreSQLStorage(AsyncStorageInterface):
+    """Async PostgreSQL storage using asyncpg (Phase 2)"""
+    
+    def __init__(self, connection_string: str, pool_size: int = 5):
+        try:
+            import asyncpg
+            self.asyncpg = asyncpg
+        except ImportError:
+            raise ImportError("asyncpg is required for async PostgreSQL storage. Install with: pip install asyncpg")
+        
+        self.connection_string = connection_string
+        self.pool_size = pool_size
+        self._pool = None
+        self._connection = None  # For transaction context
+        
+    async def _get_pool(self):
+        """Get or create connection pool"""
+        if self._pool is None:
+            self._pool = await self.asyncpg.create_pool(
+                self.connection_string,
+                min_size=1,
+                max_size=self.pool_size,
+                command_timeout=30
+            )
+        return self._pool
+    
+    async def _get_connection(self):
+        """Get connection (from transaction context or pool)"""
+        if self._connection:
+            return self._connection
+        pool = await self._get_pool()
+        return pool
+    
+    async def _ensure_table(self, table: str) -> None:
+        """Ensure table exists with proper schema"""
+        conn = await self._get_connection()
+        
+        # If using pool, acquire connection temporarily
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                await self._create_table_schema(connection, table)
+        else:
+            await self._create_table_schema(conn, table)
+    
+    async def _create_table_schema(self, connection, table: str) -> None:
+        """Create table schema on a specific connection"""
+        await connection.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table} (
+                id TEXT PRIMARY KEY,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await connection.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table}_data 
+            ON {table} USING gin(data)
+        """)
+        await connection.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table}_created_at 
+            ON {table}(created_at)
+        """)
+        await connection.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table}_updated_at 
+            ON {table}(updated_at)
+        """)
+    
+    async def save(self, table: str, record_id: str, data: Dict[str, Any]) -> None:
+        """Save a record to PostgreSQL asynchronously"""
+        await self._ensure_table(table)
+        
+        import json
+        now = datetime.now(timezone.utc)
+        data_json = json.dumps(data, default=str)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                await connection.execute(f"""
+                    INSERT INTO {table} (id, data, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (id) DO UPDATE SET
+                        data = EXCLUDED.data,
+                        updated_at = EXCLUDED.updated_at
+                """, record_id, data_json, now, now)
+        else:
+            await conn.execute(f"""
+                INSERT INTO {table} (id, data, created_at, updated_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (id) DO UPDATE SET
+                    data = EXCLUDED.data,
+                    updated_at = EXCLUDED.updated_at
+            """, record_id, data_json, now, now)
+    
+    async def load(self, table: str, record_id: str) -> Optional[Dict[str, Any]]:
+        """Load a record from PostgreSQL asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                row = await connection.fetchrow(f"""
+                    SELECT data FROM {table} WHERE id = $1
+                """, record_id)
+        else:
+            row = await conn.fetchrow(f"""
+                SELECT data FROM {table} WHERE id = $1
+            """, record_id)
+        
+        if row:
+            return dict(row['data'])
+        return None
+    
+    async def load_all(self, table: str) -> List[Dict[str, Any]]:
+        """Load all records from a table asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                rows = await connection.fetch(f"""
+                    SELECT data FROM {table} ORDER BY created_at
+                """)
+        else:
+            rows = await conn.fetch(f"""
+                SELECT data FROM {table} ORDER BY created_at
+            """)
+        
+        return [dict(row['data']) for row in rows]
+    
+    async def delete(self, table: str, record_id: str) -> bool:
+        """Delete a record from PostgreSQL asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                result = await connection.execute(f"""
+                    DELETE FROM {table} WHERE id = $1
+                """, record_id)
+        else:
+            result = await conn.execute(f"""
+                DELETE FROM {table} WHERE id = $1
+            """, record_id)
+        
+        # asyncpg returns "DELETE n" where n is the number of rows affected
+        return int(result.split()[-1]) > 0
+    
+    async def exists(self, table: str, record_id: str) -> bool:
+        """Check if a record exists asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                row = await connection.fetchrow(f"""
+                    SELECT 1 FROM {table} WHERE id = $1 LIMIT 1
+                """, record_id)
+        else:
+            row = await conn.fetchrow(f"""
+                SELECT 1 FROM {table} WHERE id = $1 LIMIT 1
+            """, record_id)
+        
+        return row is not None
+    
+    async def find(self, table: str, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Find records matching filters asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if not filters:
+            if hasattr(conn, 'acquire'):
+                async with conn.acquire() as connection:
+                    rows = await connection.fetch(f"""
+                        SELECT data FROM {table} ORDER BY created_at
+                    """)
+            else:
+                rows = await conn.fetch(f"""
+                    SELECT data FROM {table} ORDER BY created_at
+                """)
+        else:
+            # Build WHERE clause using JSONB operators
+            conditions = []
+            params = []
+            for i, (key, value) in enumerate(filters.items(), 1):
+                conditions.append(f"data ->> ${i*2-1} = ${i*2}")
+                params.extend([key, str(value)])
+            
+            where_clause = " AND ".join(conditions)
+            query = f"""
+                SELECT data FROM {table} 
+                WHERE {where_clause}
+                ORDER BY created_at
+            """
+            
+            if hasattr(conn, 'acquire'):
+                async with conn.acquire() as connection:
+                    rows = await connection.fetch(query, *params)
+            else:
+                rows = await conn.fetch(query, *params)
+        
+        return [dict(row['data']) for row in rows]
+    
+    async def count(self, table: str) -> int:
+        """Count records in table asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                row = await connection.fetchrow(f"""
+                    SELECT COUNT(*) as count FROM {table}
+                """)
+        else:
+            row = await conn.fetchrow(f"""
+                SELECT COUNT(*) as count FROM {table}
+            """)
+        
+        return row['count']
+    
+    async def clear_table(self, table: str) -> None:
+        """Clear all records from a table asynchronously"""
+        await self._ensure_table(table)
+        
+        conn = await self._get_connection()
+        
+        if hasattr(conn, 'acquire'):
+            async with conn.acquire() as connection:
+                await connection.execute(f"DELETE FROM {table}")
+        else:
+            await conn.execute(f"DELETE FROM {table}")
+    
+    async def begin_transaction(self) -> None:
+        """Start a database transaction asynchronously"""
+        if self._connection is None:
+            pool = await self._get_pool()
+            self._connection = await pool.acquire()
+            self._transaction = self._connection.transaction()
+            await self._transaction.start()
+    
+    async def commit(self) -> None:
+        """Commit current transaction asynchronously"""
+        if self._connection and hasattr(self, '_transaction'):
+            await self._transaction.commit()
+            await self._pool.release(self._connection)
+            self._connection = None
+            del self._transaction
+    
+    async def rollback(self) -> None:
+        """Rollback current transaction asynchronously"""
+        if self._connection and hasattr(self, '_transaction'):
+            await self._transaction.rollback()
+            await self._pool.release(self._connection)
+            self._connection = None
+            del self._transaction
+    
+    async def close(self) -> None:
+        """Close async PostgreSQL pool"""
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
+
+
+class AsyncStorageManager:
+    """Manages async storage backend selection and provides convenience methods"""
+    
+    def __init__(self, storage: AsyncStorageInterface):
+        self.storage = storage
+    
+    async def save_record(self, record: StorageRecord, table: str) -> None:
+        """Save a StorageRecord to storage asynchronously"""
+        await self.storage.save(table, record.id, record.to_dict())
+    
+    async def load_record(self, record_type: type, table: str, record_id: str) -> Optional[StorageRecord]:
+        """Load and convert to StorageRecord asynchronously"""
+        data = await self.storage.load(table, record_id)
+        if data:
+            return record_type.from_dict(data)
+        return None
+    
+    async def load_all_records(self, record_type: type, table: str) -> List[StorageRecord]:
+        """Load all records and convert to StorageRecord objects asynchronously"""
+        all_data = await self.storage.load_all(table)
+        return [record_type.from_dict(data) for data in all_data]
+    
+    async def find_records(self, record_type: type, table: str, filters: Dict[str, Any]) -> List[StorageRecord]:
+        """Find records and convert to StorageRecord objects asynchronously"""
+        found_data = await self.storage.find(table, filters)
+        return [record_type.from_dict(data) for data in found_data]
+    
+    async def close(self) -> None:
+        """Close async storage backend"""
+        await self.storage.close()

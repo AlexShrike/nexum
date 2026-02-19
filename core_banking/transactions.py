@@ -24,6 +24,14 @@ from .customers import CustomerManager
 from .compliance import ComplianceEngine, ComplianceAction
 from .logging_config import get_logger, log_action
 
+# Import events for Phase 2 observer pattern (optional)
+try:
+    from .events import EventDispatcher, DomainEvent, create_transaction_event
+except ImportError:
+    EventDispatcher = None
+    DomainEvent = None
+    create_transaction_event = None
+
 
 class TransactionType(Enum):
     """Types of banking transactions"""
@@ -149,7 +157,8 @@ class TransactionProcessor:
         account_manager: AccountManager,
         customer_manager: CustomerManager,
         compliance_engine: ComplianceEngine,
-        audit_trail: AuditTrail
+        audit_trail: AuditTrail,
+        event_dispatcher: Optional['EventDispatcher'] = None
     ):
         self.storage = storage
         self.ledger = ledger
@@ -160,6 +169,9 @@ class TransactionProcessor:
         self.table_name = "transactions"
         self.logger = get_logger("nexum.transactions")
         
+        # Event dispatcher for publishing domain events (Phase 2)
+        self._event_dispatcher = event_dispatcher
+        
         # System accounts for external transactions
         self._system_accounts = {
             "external_deposits": "EXT_DEP_001",  # External deposit source
@@ -168,6 +180,15 @@ class TransactionProcessor:
             "interest_expense": "INT_EXP_001",  # Interest expense account
             "interest_income": "INT_INC_001"  # Interest income account
         }
+    
+    def _publish_event(self, event_type, transaction: Transaction) -> None:
+        """Publish a domain event if event dispatcher is available"""
+        if self._event_dispatcher and create_transaction_event and event_type:
+            try:
+                event = create_transaction_event(event_type, transaction)
+                self._event_dispatcher.publish(event)
+            except Exception as e:
+                self.logger.error(f"Error publishing event {event_type}: {e}")
     
     def create_transaction(
         self,
@@ -265,6 +286,10 @@ class TransactionProcessor:
             }
         )
         
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.TRANSACTION_CREATED, transaction)
+        
         return transaction
     
     def process_transaction(self, transaction_id: str) -> Transaction:
@@ -338,6 +363,10 @@ class TransactionProcessor:
                     }
                 )
                 
+                # Publish domain event (Phase 2)
+                if DomainEvent:
+                    self._publish_event(DomainEvent.TRANSACTION_POSTED, transaction)
+                
             except Exception as e:
                 # Handle processing failure
                 self._fail_transaction(transaction, str(e))
@@ -407,6 +436,10 @@ class TransactionProcessor:
                 "reason": reason
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.TRANSACTION_REVERSED, original_transaction)
         
         return processed_reversal
     
@@ -821,6 +854,10 @@ class TransactionProcessor:
                 "failed_at": transaction.processed_at.isoformat()
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.TRANSACTION_FAILED, transaction)
     
     def _find_by_idempotency_key(self, idempotency_key: str) -> Optional[Transaction]:
         """Find transaction by idempotency key"""

@@ -17,6 +17,14 @@ from .currency import Money, Currency
 from .storage import StorageInterface, StorageRecord
 from .audit import AuditTrail, AuditEventType
 
+# Import events for Phase 2 observer pattern (optional)
+try:
+    from .events import EventDispatcher, DomainEvent, create_customer_event
+except ImportError:
+    EventDispatcher = None
+    DomainEvent = None
+    create_customer_event = None
+
 
 class KYCStatus(Enum):
     """KYC verification status"""
@@ -182,10 +190,13 @@ class CustomerManager:
     Manages customer lifecycle, KYC processes, and tier-based limits
     """
     
-    def __init__(self, storage: StorageInterface, audit_trail: AuditTrail):
+    def __init__(self, storage: StorageInterface, audit_trail: AuditTrail, event_dispatcher: Optional['EventDispatcher'] = None):
         self.storage = storage
         self.audit_trail = audit_trail
         self.table_name = "customers"
+        
+        # Event dispatcher for publishing domain events (Phase 2)
+        self._event_dispatcher = event_dispatcher
         
         # Default KYC limits by tier (in USD - adjust for other currencies)
         self._default_kyc_limits = {
@@ -213,6 +224,16 @@ class CustomerManager:
                 # No annual limit for highest tier
             )
         }
+    
+    def _publish_event(self, event_type, customer: Customer) -> None:
+        """Publish a domain event if event dispatcher is available"""
+        if self._event_dispatcher and create_customer_event and event_type:
+            try:
+                event = create_customer_event(event_type, customer)
+                self._event_dispatcher.publish(event)
+            except Exception as e:
+                # Log but don't fail the operation
+                pass
     
     def create_customer(
         self,
@@ -266,6 +287,10 @@ class CustomerManager:
                 "kyc_tier": customer.kyc_tier.value
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.CUSTOMER_CREATED, customer)
         
         return customer
     
@@ -336,6 +361,10 @@ class CustomerManager:
                 }
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.CUSTOMER_UPDATED, customer)
         
         return customer
     
@@ -412,6 +441,10 @@ class CustomerManager:
                 "expires_at": customer.kyc_expires_at.isoformat() if customer.kyc_expires_at else None
             }
         )
+        
+        # Publish domain event (Phase 2)
+        if DomainEvent:
+            self._publish_event(DomainEvent.CUSTOMER_KYC_CHANGED, customer)
         
         return customer
     

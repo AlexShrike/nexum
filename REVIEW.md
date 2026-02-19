@@ -246,4 +246,4 @@ Several methods accept or return `Dict[str, Any]` where structured types would b
 
 *Review conducted: February 2026*
 *Codebase: github.com/AlexShrike/nexum @ 501 tests, 21 modules*
-*Reviewer: Nexum Development Team / Gradient Mind*
+*Reviewer: Nexum Development Team*

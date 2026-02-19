@@ -2,7 +2,7 @@
 name = "nexum"
 version = "1.0.0"
 description = "Nexum — Production-grade core banking system with double-entry ledger, configurable products, loans, credit lines, collections, compliance, workflows, RBAC, reporting, and Kafka integration."
-authors = ["Gradient Mind <thet800@proton.me>"]
+authors = ["AlexShrike <thet800@proton.me>"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/AlexShrike/nexum"

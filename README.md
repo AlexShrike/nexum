@@ -250,6 +250,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🏢 About
 
-**Nexum** is built by [Gradient Mind](https://gradientmind.ai) — Production-grade financial infrastructure for the modern world.
+**Nexum** — Production-grade financial infrastructure for the modern world.
 
 GitHub: [https://github.com/AlexShrike/nexum](https://github.com/AlexShrike/nexum)
