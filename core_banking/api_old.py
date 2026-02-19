@@ -851,7 +851,12 @@ async def get_account_transactions(
             "processed_at": txn.processed_at.isoformat() if txn.processed_at else None
         })
     
-    return {"transactions": result}
+    return {
+        "items": result,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 # Credit Line Endpoints

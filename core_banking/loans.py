@@ -18,6 +18,7 @@ from .storage import StorageInterface, StorageRecord
 from .audit import AuditTrail, AuditEventType
 from .accounts import AccountManager, Account, ProductType
 from .transactions import TransactionProcessor, TransactionType, TransactionChannel
+from .logging_config import get_logger, log_action
 
 
 class LoanState(Enum):
@@ -251,6 +252,7 @@ class LoanManager:
         self.loans_table = "loans"
         self.payments_table = "loan_payments"
         self.amortization_table = "amortization_schedules"
+        self.logger = get_logger("nexum.loans")
     
     def originate_loan(
         self,
@@ -300,6 +302,21 @@ class LoanManager:
         
         # Save loan
         self._save_loan(loan)
+        
+        # Log loan origination
+        log_action(
+            self.logger, "info", f"Loan originated",
+            action="originate_loan", resource=f"loan:{loan.id}",
+            extra={
+                "loan_id": loan.id,
+                "customer_id": customer_id,
+                "account_id": loan_account.id,
+                "principal_amount": terms.principal_amount.to_string(),
+                "term_months": terms.term_months,
+                "annual_interest_rate": str(terms.annual_interest_rate),
+                "payment_frequency": terms.payment_frequency.value
+            }
+        )
         
         # Generate amortization schedule
         self.generate_amortization_schedule(loan.id)
