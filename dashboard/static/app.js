@@ -10,7 +10,7 @@ const formatCurrency = (amount, currency = 'USD') => {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: currency
-    }).format(amount);
+    }).format(amount || 0);
 };
 
 const api = {
@@ -33,48 +33,1153 @@ const api = {
 
 // Navigation component
 function Sidebar({ currentPage, onPageChange }) {
-    const navItems = [
-        { id: 'users', label: 'Users & RBAC', icon: '👥' },
-        { id: 'audit', label: 'Audit Trail', icon: '📋' },
-        { id: 'workflows', label: 'Workflows', icon: '🔄' },
-        { id: 'notifications', label: 'Notifications', icon: '📧' },
-        { id: 'compliance', label: 'Compliance', icon: '⚖️' },
-        { id: 'settings', label: 'Settings', icon: '⚙️' }
+    const corePages = [
+        { id: 'overview', label: 'Overview', icon: 'chart-line' },
+        { id: 'customers', label: 'Customers', icon: 'users' },
+        { id: 'accounts', label: 'Accounts', icon: 'credit-card' },
+        { id: 'transactions', label: 'Transactions', icon: 'exchange-alt' },
+        { id: 'loans', label: 'Loans', icon: 'money-bill-wave' },
+        { id: 'credit-lines', label: 'Credit Lines', icon: 'credit-card' },
+        { id: 'collections', label: 'Collections', icon: 'exclamation-triangle' },
+        { id: 'products', label: 'Products', icon: 'box' }
+    ];
+
+    const adminPages = [
+        { id: 'users', label: 'Users & RBAC', icon: 'user-shield' },
+        { id: 'audit', label: 'Audit Trail', icon: 'clipboard-list' },
+        { id: 'workflows', label: 'Workflows', icon: 'project-diagram' },
+        { id: 'notifications', label: 'Notifications', icon: 'bell' },
+        { id: 'compliance', label: 'Compliance', icon: 'balance-scale' },
+        { id: 'settings', label: 'Settings', icon: 'cog' }
     ];
 
     return html`
-        <div class="sidebar w-64 h-screen fixed left-0 top-0 text-white p-6">
-            <div class="mb-8">
-                <h1 class="text-xl font-bold">Nexum Banking</h1>
-                <p class="text-sm opacity-75">Admin Dashboard</p>
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="sidebar-title">Nexum Banking</h1>
+                <p class="sidebar-subtitle">Core Banking Platform</p>
             </div>
             
-            <nav class="space-y-2">
-                ${navItems.map(item => html`
-                    <button
-                        key=${item.id}
-                        class="nav-item ${currentPage === item.id ? 'active' : ''} w-full text-left px-4 py-3 rounded transition-colors flex items-center space-x-3"
-                        onClick=${() => onPageChange(item.id)}
-                    >
-                        <span class="text-lg">${item.icon}</span>
-                        <span>${item.label}</span>
-                    </button>
+            <nav class="nav-menu">
+                ${corePages.map(item => html`
+                    <li key=${item.id} class="nav-item">
+                        <a
+                            class="nav-link ${currentPage === item.id ? 'active' : ''}"
+                            href="#"
+                            onClick=${(e) => { e.preventDefault(); onPageChange(item.id); }}
+                        >
+                            ${item.label}
+                        </a>
+                    </li>
+                `)}
+                
+                <li class="nav-item" style="margin: 1rem 0; padding: 0 1rem;">
+                    <div style="height: 1px; background: rgba(255, 255, 255, 0.1);"></div>
+                </li>
+                
+                ${adminPages.map(item => html`
+                    <li key=${item.id} class="nav-item">
+                        <a
+                            class="nav-link ${currentPage === item.id ? 'active' : ''}"
+                            href="#"
+                            onClick=${(e) => { e.preventDefault(); onPageChange(item.id); }}
+                        >
+                            ${item.label}
+                        </a>
+                    </li>
                 `)}
             </nav>
         </div>
     `;
 }
 
-// Main content area
+// Main content wrapper
 function MainContent({ children }) {
     return html`
-        <div class="ml-64 p-8">
-            ${children}
+        <div class="main-content">
+            <div class="content-body">
+                ${children}
+            </div>
         </div>
     `;
 }
 
-// Users & RBAC Page
+// Overview Page
+function OverviewPage() {
+    const [overview, setOverview] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadOverview();
+    }, []);
+
+    const loadOverview = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/overview');
+            setOverview(data);
+        } catch (error) {
+            console.error('Failed to load overview:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) return html`<div class="loading">Loading overview...</div>`;
+    if (!overview) return html`<div class="error">Failed to load overview data</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Overview</h1>
+                <p class="page-subtitle">Core banking system dashboard</p>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Total Accounts</h3>
+                    </div>
+                    <div class="stat-value">${overview.accounts.total}</div>
+                    <div class="stat-change">
+                        ${overview.accounts.by_type.savings} Savings, ${overview.accounts.by_type.checking} Checking
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Total Deposits</h3>
+                    </div>
+                    <div class="stat-value">${formatCurrency(overview.balances.total_deposits)}</div>
+                    <div class="stat-change">Available customer funds</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Outstanding Loans</h3>
+                    </div>
+                    <div class="stat-value">${formatCurrency(overview.balances.total_loans)}</div>
+                    <div class="stat-change">${overview.accounts.by_type.loans} active loans</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Credit Utilized</h3>
+                    </div>
+                    <div class="stat-value">${formatCurrency(overview.balances.total_credit_used)}</div>
+                    <div class="stat-change">${overview.accounts.by_type.credit_lines} credit lines</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Transactions (30d)</h3>
+                    </div>
+                    <div class="stat-value">${overview.transactions.count_30d}</div>
+                    <div class="stat-change">Volume: ${formatCurrency(overview.transactions.volume_30d)}</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Collection Cases</h3>
+                    </div>
+                    <div class="stat-value">${overview.collections.total_cases}</div>
+                    <div class="stat-change amount-negative">Overdue: ${formatCurrency(overview.collections.total_overdue)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Customers Page
+function CustomersPage() {
+    const [customers, setCustomers] = useState([]);
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadCustomers();
+    }, []);
+
+    const loadCustomers = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/customers');
+            setCustomers(data);
+        } catch (error) {
+            console.error('Failed to load customers:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const viewCustomerDetail = async (customerId) => {
+        try {
+            const customerDetail = await api.get(`/api/customers/${customerId}`);
+            setSelectedCustomer(customerDetail);
+        } catch (error) {
+            console.error('Failed to load customer detail:', error);
+        }
+    };
+
+    if (selectedCustomer) {
+        return html`
+            <div>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">${selectedCustomer.name}</h1>
+                            <p class="page-subtitle">Customer Details</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedCustomer(null)}
+                        >
+                            Back to Customers
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Customer ID</div>
+                        <div class="detail-value">${selectedCustomer.id}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Email</div>
+                        <div class="detail-value">${selectedCustomer.email}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Phone</div>
+                        <div class="detail-value">${selectedCustomer.phone}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge ${selectedCustomer.status === 'active' ? 'status-active' : 'status-inactive'}">
+                                ${selectedCustomer.status}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">Customer Accounts</h3>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Account ID</th>
+                                <th>Type</th>
+                                <th>Balance</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${selectedCustomer.accounts.map(account => html`
+                                <tr key=${account.id}>
+                                    <td>${account.id.substring(0, 8)}...</td>
+                                    <td>${account.product_type}</td>
+                                    <td class="${account.balance >= 0 ? 'amount-positive' : 'amount-negative'}">
+                                        ${formatCurrency(account.balance)}
+                                    </td>
+                                    <td>
+                                        <span class="status-badge status-active">${account.status}</span>
+                                    </td>
+                                    <td>${formatDate(account.created_at)}</td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    if (loading) return html`<div class="loading">Loading customers...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Customers</h1>
+                <p class="page-subtitle">Customer management and profiles</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Customer Directory</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Accounts</th>
+                            <th>Total Balance</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${customers.map(customer => html`
+                            <tr key=${customer.id} onClick=${() => viewCustomerDetail(customer.id)}>
+                                <td>${customer.name}</td>
+                                <td>${customer.email}</td>
+                                <td>${customer.phone}</td>
+                                <td>${customer.account_count || 0}</td>
+                                <td class="${customer.total_balance >= 0 ? 'amount-positive' : 'amount-negative'}">
+                                    ${formatCurrency(customer.total_balance)}
+                                </td>
+                                <td>
+                                    <span class="status-badge ${customer.status === 'active' ? 'status-active' : 'status-inactive'}">
+                                        ${customer.status}
+                                    </span>
+                                </td>
+                                <td>${formatDate(customer.created_at)}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Accounts Page
+function AccountsPage() {
+    const [accounts, setAccounts] = useState([]);
+    const [selectedAccount, setSelectedAccount] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [typeFilter, setTypeFilter] = useState('');
+
+    useEffect(() => {
+        loadAccounts();
+    }, [typeFilter]);
+
+    const loadAccounts = async () => {
+        try {
+            setLoading(true);
+            const params = typeFilter ? `?product_type=${typeFilter}` : '';
+            const data = await api.get(`/api/accounts${params}`);
+            setAccounts(data);
+        } catch (error) {
+            console.error('Failed to load accounts:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const viewAccountDetail = async (accountId) => {
+        try {
+            const accountDetail = await api.get(`/api/accounts/${accountId}`);
+            setSelectedAccount(accountDetail);
+        } catch (error) {
+            console.error('Failed to load account detail:', error);
+        }
+    };
+
+    if (selectedAccount) {
+        return html`
+            <div>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">Account ${selectedAccount.id.substring(0, 8)}...</h1>
+                            <p class="page-subtitle">Account Details</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedAccount(null)}
+                        >
+                            Back to Accounts
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Current Balance</div>
+                        <div class="detail-value ${selectedAccount.balance >= 0 ? 'amount-positive' : 'amount-negative'}">
+                            ${formatCurrency(selectedAccount.balance)}
+                        </div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Account Type</div>
+                        <div class="detail-value">${selectedAccount.product_type}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge status-active">${selectedAccount.status}</span>
+                        </div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Created</div>
+                        <div class="detail-value">${formatDate(selectedAccount.created_at)}</div>
+                    </div>
+                </div>
+                
+                ${selectedAccount.recent_transactions && selectedAccount.recent_transactions.length > 0 && html`
+                    <div class="data-table">
+                        <div class="table-header">
+                            <h3 class="table-title">Recent Transactions</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${selectedAccount.recent_transactions.map(txn => html`
+                                    <tr key=${txn.id}>
+                                        <td>${formatDate(txn.created_at)}</td>
+                                        <td>${txn.transaction_type}</td>
+                                        <td class="${txn.amount >= 0 ? 'amount-positive' : 'amount-negative'}">
+                                            ${formatCurrency(txn.amount)}
+                                        </td>
+                                        <td>
+                                            <span class="status-badge status-active">${txn.status}</span>
+                                        </td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    if (loading) return html`<div class="loading">Loading accounts...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Accounts</h1>
+                <p class="page-subtitle">Account portfolio management</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Account Portfolio</h3>
+                    <div class="table-filters">
+                        <select
+                            class="filter-select"
+                            value=${typeFilter}
+                            onChange=${e => setTypeFilter(e.target.value)}
+                        >
+                            <option value="">All Types</option>
+                            <option value="savings">Savings</option>
+                            <option value="checking">Checking</option>
+                            <option value="loan">Loan</option>
+                            <option value="credit_line">Credit Line</option>
+                        </select>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Account ID</th>
+                            <th>Customer</th>
+                            <th>Type</th>
+                            <th>Balance</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${accounts.map(account => html`
+                            <tr key=${account.id} onClick=${() => viewAccountDetail(account.id)}>
+                                <td>${account.id.substring(0, 8)}...</td>
+                                <td>${account.customer_name || 'N/A'}</td>
+                                <td>
+                                    <span class="status-badge status-current">${account.product_type}</span>
+                                </td>
+                                <td class="${account.balance >= 0 ? 'amount-positive' : 'amount-negative'}">
+                                    ${formatCurrency(account.balance)}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-active">${account.status}</span>
+                                </td>
+                                <td>${formatDate(account.created_at)}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Transactions Page
+function TransactionsPage() {
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadTransactions();
+    }, []);
+
+    const loadTransactions = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/transactions?limit=50');
+            setTransactions(data);
+        } catch (error) {
+            console.error('Failed to load transactions:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) return html`<div class="loading">Loading transactions...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Transactions</h1>
+                <p class="page-subtitle">Transaction history and monitoring</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Transaction History</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Transaction ID</th>
+                            <th>Type</th>
+                            <th>From Account</th>
+                            <th>To Account</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${transactions.map(txn => html`
+                            <tr key=${txn.id}>
+                                <td>${formatDate(txn.created_at)}</td>
+                                <td>${txn.id.substring(0, 8)}...</td>
+                                <td>
+                                    <span class="status-badge status-current">${txn.transaction_type}</span>
+                                </td>
+                                <td>${txn.from_account_name || 'N/A'}</td>
+                                <td>${txn.to_account_name || 'N/A'}</td>
+                                <td class="${txn.amount >= 0 ? 'amount-positive' : 'amount-negative'}">
+                                    ${formatCurrency(txn.amount)}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-active">${txn.status}</span>
+                                </td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Loans Page
+function LoansPage() {
+    const [loans, setLoans] = useState([]);
+    const [selectedLoan, setSelectedLoan] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadLoans();
+    }, []);
+
+    const loadLoans = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/loans');
+            setLoans(data);
+        } catch (error) {
+            console.error('Failed to load loans:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const viewLoanDetail = async (loanId) => {
+        try {
+            const loanDetail = await api.get(`/api/loans/${loanId}`);
+            setSelectedLoan(loanDetail);
+        } catch (error) {
+            console.error('Failed to load loan detail:', error);
+        }
+    };
+
+    if (selectedLoan) {
+        return html`
+            <div>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">${selectedLoan.customer} - Loan</h1>
+                            <p class="page-subtitle">Loan Details & Amortization</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedLoan(null)}
+                        >
+                            Back to Loans
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Principal Amount</div>
+                        <div class="detail-value">${formatCurrency(selectedLoan.terms.principal_amount)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Current Balance</div>
+                        <div class="detail-value amount-negative">${formatCurrency(selectedLoan.current_status.current_balance)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Interest Rate</div>
+                        <div class="detail-value">${selectedLoan.terms.annual_interest_rate.toFixed(2)}%</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Term</div>
+                        <div class="detail-value">${selectedLoan.terms.term_months} months</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge ${selectedLoan.current_status.state === 'active' ? 'status-active' : 'status-inactive'}">
+                                ${selectedLoan.current_status.state}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Days Past Due</div>
+                        <div class="detail-value ${selectedLoan.current_status.days_past_due > 0 ? 'amount-negative' : ''}">
+                            ${selectedLoan.current_status.days_past_due} days
+                        </div>
+                    </div>
+                </div>
+                
+                ${selectedLoan.amortization_schedule && selectedLoan.amortization_schedule.length > 0 && html`
+                    <div class="data-table">
+                        <div class="table-header">
+                            <h3 class="table-title">Amortization Schedule</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Payment #</th>
+                                    <th>Date</th>
+                                    <th>Payment Amount</th>
+                                    <th>Principal</th>
+                                    <th>Interest</th>
+                                    <th>Remaining Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${selectedLoan.amortization_schedule.slice(0, 12).map(payment => html`
+                                    <tr key=${payment.payment_number}>
+                                        <td>${payment.payment_number}</td>
+                                        <td>${formatDate(payment.payment_date)}</td>
+                                        <td>${formatCurrency(payment.payment_amount)}</td>
+                                        <td>${formatCurrency(payment.principal_amount)}</td>
+                                        <td>${formatCurrency(payment.interest_amount)}</td>
+                                        <td>${formatCurrency(payment.remaining_balance)}</td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    if (loading) return html`<div class="loading">Loading loans...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Loans</h1>
+                <p class="page-subtitle">Loan portfolio management</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Loan Portfolio</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Loan Number</th>
+                            <th>Customer</th>
+                            <th>Type</th>
+                            <th>Principal</th>
+                            <th>Balance</th>
+                            <th>Rate</th>
+                            <th>Status</th>
+                            <th>Next Payment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${loans.map(loan => html`
+                            <tr key=${loan.id} onClick=${() => viewLoanDetail(loan.id)}>
+                                <td>${loan.loan_number}</td>
+                                <td>${loan.customer_name}</td>
+                                <td>
+                                    <span class="status-badge status-current">${loan.type}</span>
+                                </td>
+                                <td>${formatCurrency(loan.principal)}</td>
+                                <td class="amount-negative">${formatCurrency(loan.balance)}</td>
+                                <td>${loan.rate.toFixed(2)}%</td>
+                                <td>
+                                    <span class="status-badge ${loan.status === 'active' ? 'status-active' : 'status-inactive'}">
+                                        ${loan.status}
+                                    </span>
+                                </td>
+                                <td>${formatDate(loan.next_payment_date)}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Credit Lines Page
+function CreditLinesPage() {
+    const [creditLines, setCreditLines] = useState([]);
+    const [selectedCreditLine, setSelectedCreditLine] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadCreditLines();
+    }, []);
+
+    const loadCreditLines = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/credit-lines');
+            setCreditLines(data);
+        } catch (error) {
+            console.error('Failed to load credit lines:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const viewCreditLineDetail = async (creditLineId) => {
+        try {
+            const creditLineDetail = await api.get(`/api/credit-lines/${creditLineId}`);
+            setSelectedCreditLine(creditLineDetail);
+        } catch (error) {
+            console.error('Failed to load credit line detail:', error);
+        }
+    };
+
+    if (selectedCreditLine) {
+        return html`
+            <div>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">${selectedCreditLine.customer} - Credit Line</h1>
+                            <p class="page-subtitle">Credit Line Details & Statements</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedCreditLine(null)}
+                        >
+                            Back to Credit Lines
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Credit Limit</div>
+                        <div class="detail-value">${formatCurrency(selectedCreditLine.credit_info.credit_limit)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Current Balance</div>
+                        <div class="detail-value amount-negative">${formatCurrency(selectedCreditLine.credit_info.current_balance)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Available Credit</div>
+                        <div class="detail-value amount-positive">${formatCurrency(selectedCreditLine.credit_info.available_credit)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge status-active">${selectedCreditLine.credit_info.status}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                ${selectedCreditLine.statements && selectedCreditLine.statements.length > 0 && html`
+                    <div class="data-table">
+                        <div class="table-header">
+                            <h3 class="table-title">Statements</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Statement Date</th>
+                                    <th>Due Date</th>
+                                    <th>Balance</th>
+                                    <th>Minimum Payment</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${selectedCreditLine.statements.map(statement => html`
+                                    <tr key=${statement.id}>
+                                        <td>${formatDate(statement.statement_date)}</td>
+                                        <td>${formatDate(statement.due_date)}</td>
+                                        <td class="amount-negative">${formatCurrency(statement.current_balance)}</td>
+                                        <td>${formatCurrency(statement.minimum_payment_due)}</td>
+                                        <td>
+                                            <span class="status-badge status-current">${statement.status}</span>
+                                        </td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    if (loading) return html`<div class="loading">Loading credit lines...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Credit Lines</h1>
+                <p class="page-subtitle">Credit line portfolio management</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Credit Line Portfolio</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Account Number</th>
+                            <th>Customer</th>
+                            <th>Credit Limit</th>
+                            <th>Used</th>
+                            <th>Available</th>
+                            <th>Status</th>
+                            <th>Utilization</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${creditLines.map(creditLine => html`
+                            <tr key=${creditLine.id} onClick=${() => viewCreditLineDetail(creditLine.id)}>
+                                <td>${creditLine.account_number}</td>
+                                <td>${creditLine.customer_name}</td>
+                                <td>${formatCurrency(creditLine.limit)}</td>
+                                <td class="amount-negative">${formatCurrency(creditLine.used)}</td>
+                                <td class="amount-positive">${formatCurrency(creditLine.available)}</td>
+                                <td>
+                                    <span class="status-badge status-active">${creditLine.status}</span>
+                                </td>
+                                <td>${creditLine.limit > 0 ? ((creditLine.used / creditLine.limit) * 100).toFixed(1) : 0}%</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Collections Page
+function CollectionsPage() {
+    const [cases, setCases] = useState([]);
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadCollectionsData();
+    }, []);
+
+    const loadCollectionsData = async () => {
+        try {
+            setLoading(true);
+            const [casesData, statsData] = await Promise.all([
+                api.get('/api/collections/cases'),
+                api.get('/api/collections/stats')
+            ]);
+            setCases(casesData);
+            setStats(statsData);
+        } catch (error) {
+            console.error('Failed to load collections data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) return html`<div class="loading">Loading collections...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Collections</h1>
+                <p class="page-subtitle">Delinquency management and recovery</p>
+            </div>
+            
+            ${stats && html`
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Total Cases</h3>
+                        </div>
+                        <div class="stat-value">${stats.total_cases}</div>
+                        <div class="stat-change">Active delinquent accounts</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Total Overdue</h3>
+                        </div>
+                        <div class="stat-value amount-negative">${formatCurrency(stats.total_overdue_amount)}</div>
+                        <div class="stat-change">Outstanding balance</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Recovery Rate</h3>
+                        </div>
+                        <div class="stat-value">${stats.recovery_rate}%</div>
+                        <div class="stat-change">6-month average</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Cases Resolved (6M)</h3>
+                        </div>
+                        <div class="stat-value">${stats.cases_resolved_6m}</div>
+                        <div class="stat-change">Successfully closed</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h3 class="chart-title">Days Past Due Distribution</h3>
+                    ${Object.entries(stats.dpd_distribution).map(([bucket, count]) => html`
+                        <div key=${bucket} class="dpd-bar">
+                            <div class="dpd-label">${bucket === '0' ? 'Current' : bucket + ' days'}</div>
+                            <div class="dpd-bar-fill bucket-${bucket.replace('+', '')}">
+                                <div style="width: ${count > 0 ? Math.max(10, (count / Math.max(...Object.values(stats.dpd_distribution))) * 100) : 0}%; height: 100%; opacity: 0.7;"></div>
+                            </div>
+                            <div class="dpd-value">${count}</div>
+                        </div>
+                    `)}</div>
+                </div>
+            `}
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Collection Cases</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Customer</th>
+                            <th>Amount Overdue</th>
+                            <th>Days Past Due</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Assigned To</th>
+                            <th>Account Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cases.map(case_ => html`
+                            <tr key=${case_.id}>
+                                <td>${case_.case_id}</td>
+                                <td>${case_.customer_name}</td>
+                                <td class="amount-negative">${formatCurrency(case_.amount_overdue)}</td>
+                                <td class="${case_.days_past_due > 90 ? 'priority-5' : case_.days_past_due > 60 ? 'priority-4' : case_.days_past_due > 30 ? 'priority-3' : 'priority-2'}">
+                                    ${case_.days_past_due} days
+                                </td>
+                                <td>
+                                    <span class="status-badge ${case_.status === 'current' ? 'status-current' : case_.status === 'early' ? 'status-early' : case_.status === 'serious' ? 'status-serious' : 'status-default'}">
+                                        ${case_.status}
+                                    </span>
+                                </td>
+                                <td class="priority-${case_.priority}">P${case_.priority}</td>
+                                <td>${case_.assigned_to}</td>
+                                <td>
+                                    <span class="status-badge status-current">${case_.account_type}</span>
+                                </td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Products Page
+function ProductsPage() {
+    const [products, setProducts] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadProducts();
+    }, []);
+
+    const loadProducts = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get('/api/products');
+            setProducts(data);
+        } catch (error) {
+            console.error('Failed to load products:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const viewProductDetail = async (productId) => {
+        try {
+            const productDetail = await api.get(`/api/products/${productId}`);
+            setSelectedProduct(productDetail);
+        } catch (error) {
+            console.error('Failed to load product detail:', error);
+        }
+    };
+
+    if (selectedProduct) {
+        return html`
+            <div>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">${selectedProduct.name}</h1>
+                            <p class="page-subtitle">Product Details & Configuration</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedProduct(null)}
+                        >
+                            Back to Products
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Product Code</div>
+                        <div class="detail-value">${selectedProduct.product_code}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Type</div>
+                        <div class="detail-value">${selectedProduct.product_type}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge ${selectedProduct.status === 'active' ? 'status-active' : 'status-inactive'}">
+                                ${selectedProduct.status}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Currency</div>
+                        <div class="detail-value">${selectedProduct.currency}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Active Accounts</div>
+                        <div class="detail-value">${selectedProduct.performance_metrics.total_accounts}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Total Balance</div>
+                        <div class="detail-value">${formatCurrency(selectedProduct.performance_metrics.total_balance)}</div>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">Product Description</h3>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <p>${selectedProduct.description}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    if (loading) return html`<div class="loading">Loading products...</div>`;
+
+    return html`
+        <div>
+            <div class="content-header">
+                <h1 class="page-title">Products</h1>
+                <p class="page-subtitle">Product catalog and configuration</p>
+            </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Product Catalog</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product Name</th>
+                            <th>Code</th>
+                            <th>Type</th>
+                            <th>Rate Range</th>
+                            <th>Term Range</th>
+                            <th>Status</th>
+                            <th>Active Accounts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${products.map(product => html`
+                            <tr key=${product.id} onClick=${() => viewProductDetail(product.id)}>
+                                <td>${product.name}</td>
+                                <td>${product.product_code}</td>
+                                <td>
+                                    <span class="status-badge status-current">${product.type}</span>
+                                </td>
+                                <td>${product.rate_range}</td>
+                                <td>${product.term_range}</td>
+                                <td>
+                                    <span class="status-badge ${product.status === 'active' ? 'status-active' : 'status-inactive'}">
+                                        ${product.status}
+                                    </span>
+                                </td>
+                                <td>${product.active_accounts}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Users & RBAC Page (keeping existing implementation)
 function UsersPage() {
     const [users, setUsers] = useState([]);
     const [roles, setRoles] = useState([]);
@@ -115,93 +1220,75 @@ function UsersPage() {
         }
     };
 
-    if (loading) return html`<div class="text-center py-8">Loading users data...</div>`;
+    if (loading) return html`<div class="loading">Loading users data...</div>`;
 
     if (selectedUser) {
         return html`
             <div>
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">User Detail</h2>
-                    <button
-                        class="px-4 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
-                        onClick=${() => setSelectedUser(null)}
-                    >
-                        Back to Users
-                    </button>
+                <div class="content-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h1 class="page-title">${selectedUser.user.username}</h1>
+                            <p class="page-subtitle">User Details</p>
+                        </div>
+                        <button
+                            class="action-button"
+                            onClick=${() => setSelectedUser(null)}
+                        >
+                            Back to Users
+                        </button>
+                    </div>
                 </div>
                 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">User Information</h3>
-                        <div class="space-y-2">
-                            <p><strong>Username:</strong> ${selectedUser.user.username}</p>
-                            <p><strong>Full Name:</strong> ${selectedUser.user.full_name}</p>
-                            <p><strong>Email:</strong> ${selectedUser.user.email}</p>
-                            <p><strong>Status:</strong> 
-                                <span class="${selectedUser.user.is_active ? 'text-green-600' : 'text-red-600'}">
-                                    ${selectedUser.user.is_active ? 'Active' : 'Inactive'}
-                                </span>
-                                ${selectedUser.user.is_locked && html`<span class="text-red-600 ml-2">(Locked)</span>`}
-                            </p>
-                            <p><strong>Last Login:</strong> ${formatDate(selectedUser.user.last_login)}</p>
-                            <p><strong>Created:</strong> ${formatDate(selectedUser.user.created_at)}</p>
-                            <p><strong>Created By:</strong> ${selectedUser.user.created_by}</p>
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Full Name</div>
+                        <div class="detail-value">${selectedUser.user.full_name}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Email</div>
+                        <div class="detail-value">${selectedUser.user.email}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            <span class="status-badge ${selectedUser.user.is_active ? 'status-active' : 'status-inactive'}">
+                                ${selectedUser.user.is_active ? 'Active' : 'Inactive'}
+                            </span>
                         </div>
                     </div>
-                    
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">Roles & Permissions</h3>
-                        <div class="mb-4">
-                            <strong>Roles:</strong>
-                            <div class="mt-2">
-                                ${selectedUser.roles.map(role => html`
-                                    <span key=${role.id} class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm mr-2 mb-1">
-                                        ${role.name}
-                                    </span>
-                                `)}
-                            </div>
-                        </div>
-                        <div>
-                            <strong>Total Permissions:</strong> ${selectedUser.permissions.length}
-                            <div class="mt-2 max-h-40 overflow-y-auto">
-                                ${selectedUser.permissions.map(perm => html`
-                                    <span key=${perm} class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1">
-                                        ${perm}
-                                    </span>
-                                `)}
-                            </div>
-                        </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Last Login</div>
+                        <div class="detail-value">${formatDate(selectedUser.user.last_login)}</div>
                     </div>
-                    
-                    <div class="card p-6 lg:col-span-2">
-                        <h3 class="text-lg font-semibold mb-4">Active Sessions</h3>
-                        ${selectedUser.active_sessions.length === 0 ? html`
-                            <p class="text-gray-600">No active sessions</p>
-                        ` : html`
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-4 py-2 text-left">Session ID</th>
-                                            <th class="px-4 py-2 text-left">IP Address</th>
-                                            <th class="px-4 py-2 text-left">Created</th>
-                                            <th class="px-4 py-2 text-left">Expires</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${selectedUser.active_sessions.map(session => html`
-                                            <tr key=${session.id} class="border-t">
-                                                <td class="px-4 py-2 font-mono text-xs">${session.id.substring(0, 8)}...</td>
-                                                <td class="px-4 py-2">${session.ip_address || 'Unknown'}</td>
-                                                <td class="px-4 py-2">${formatDate(session.created_at)}</td>
-                                                <td class="px-4 py-2">${formatDate(session.expires_at)}</td>
-                                            </tr>
-                                        `)}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `}
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">User Roles</h3>
                     </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Role Name</th>
+                                <th>Description</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${selectedUser.roles.map(role => html`
+                                <tr key=${role.id}>
+                                    <td>${role.name}</td>
+                                    <td>${role.description}</td>
+                                    <td>
+                                        <span class="status-badge ${role.is_system_role ? 'status-current' : 'status-active'}">
+                                            ${role.is_system_role ? 'System' : 'Custom'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         `;
@@ -209,158 +1296,137 @@ function UsersPage() {
 
     return html`
         <div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">Users & RBAC</h2>
+            <div class="content-header">
+                <h1 class="page-title">Users & RBAC</h1>
+                <p class="page-subtitle">User management and access control</p>
+            </div>
             
-            <div class="mb-6">
-                <nav class="flex space-x-1">
+            <div style="margin-bottom: 2rem;">
+                <div style="display: flex; gap: 1rem; border-bottom: 1px solid #e2e8f0;">
                     ${['users', 'roles', 'sessions'].map(tab => html`
                         <button
                             key=${tab}
-                            class="px-4 py-2 text-sm font-medium rounded-lg ${activeTab === tab ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}"
+                            style="padding: 1rem 1.5rem; border: none; background: ${activeTab === tab ? '#1A3C78' : 'transparent'}; color: ${activeTab === tab ? 'white' : '#64748b'}; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: 500; text-transform: capitalize;"
                             onClick=${() => setActiveTab(tab)}
                         >
-                            ${tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            ${tab}
                         </button>
                     `)}
-                </nav>
+                </div>
             </div>
 
             ${activeTab === 'users' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">System Users</h3>
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">System Users</h3>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Full Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roles</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Login</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${users.map(user => html`
-                                    <tr key=${user.id}>
-                                        <td class="px-6 py-4 font-medium">${user.username}</td>
-                                        <td class="px-6 py-4">${user.full_name}</td>
-                                        <td class="px-6 py-4 text-sm">${user.email}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="${user.is_active ? 'text-green-600' : 'text-red-600'} text-sm">
-                                                ${user.is_active ? 'Active' : 'Inactive'}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Full Name</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Roles</th>
+                                <th>Last Login</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => html`
+                                <tr key=${user.id} onClick=${() => viewUserDetail(user.id)}>
+                                    <td>${user.username}</td>
+                                    <td>${user.full_name}</td>
+                                    <td>${user.email}</td>
+                                    <td>
+                                        <span class="status-badge ${user.is_active ? 'status-active' : 'status-inactive'}">
+                                            ${user.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        ${user.roles.map(role => html`
+                                            <span key=${role.id} class="status-badge status-current" style="margin-right: 0.25rem;">
+                                                ${role.name}
                                             </span>
-                                            ${user.is_locked && html`<span class="text-red-600 text-xs ml-1">(Locked)</span>`}
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            ${user.roles.map(role => html`
-                                                <span key=${role.id} class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs mr-1">
-                                                    ${role.name}
-                                                </span>
-                                            `)}
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${formatDate(user.last_login)}</td>
-                                        <td class="px-6 py-4">
-                                            <button
-                                                class="text-blue-600 hover:text-blue-800 text-sm"
-                                                onClick=${() => viewUserDetail(user.id)}
-                                            >
-                                                View Details
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
+                                        `)}
+                                    </td>
+                                    <td>${formatDate(user.last_login)}</td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
                 </div>
             `}
 
             ${activeTab === 'roles' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">System Roles</h3>
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">System Roles</h3>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permissions</th>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Role Name</th>
+                                <th>Description</th>
+                                <th>Type</th>
+                                <th>Permissions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${roles.map(role => html`
+                                <tr key=${role.id}>
+                                    <td>${role.name}</td>
+                                    <td>${role.description}</td>
+                                    <td>
+                                        <span class="status-badge ${role.is_system_role ? 'status-current' : 'status-active'}">
+                                            ${role.is_system_role ? 'System' : 'Custom'}
+                                        </span>
+                                    </td>
+                                    <td>${role.permission_count} permissions</td>
                                 </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${roles.map(role => html`
-                                    <tr key=${role.id}>
-                                        <td class="px-6 py-4 font-medium">${role.name}</td>
-                                        <td class="px-6 py-4 text-sm">${role.description}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="${role.is_system_role ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'} px-2 py-1 rounded text-xs">
-                                                ${role.is_system_role ? 'System' : 'Custom'}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${role.permission_count} permissions</td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
+                            `)}
+                        </tbody>
+                    </table>
                 </div>
             `}
 
             ${activeTab === 'sessions' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">Active Sessions</h3>
+                <div class="data-table">
+                    <div class="table-header">
+                        <h3 class="table-title">Active Sessions</h3>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session ID</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP Address</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Session ID</th>
+                                <th>IP Address</th>
+                                <th>Created</th>
+                                <th>Expires</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sessions.map(session => html`
+                                <tr key=${session.id}>
+                                    <td>${session.username}</td>
+                                    <td style="font-family: monospace; font-size: 0.8rem;">${session.id.substring(0, 12)}...</td>
+                                    <td>${session.ip_address || 'Unknown'}</td>
+                                    <td>${formatDate(session.created_at)}</td>
+                                    <td>${formatDate(session.expires_at)}</td>
                                 </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${sessions.map(session => html`
-                                    <tr key=${session.id}>
-                                        <td class="px-6 py-4 font-medium">${session.username}</td>
-                                        <td class="px-6 py-4 font-mono text-xs">${session.id.substring(0, 12)}...</td>
-                                        <td class="px-6 py-4">${session.ip_address || 'Unknown'}</td>
-                                        <td class="px-6 py-4 text-sm">${formatDate(session.created_at)}</td>
-                                        <td class="px-6 py-4 text-sm">${formatDate(session.expires_at)}</td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
+                            `)}
+                        </tbody>
+                    </table>
                 </div>
             `}
         </div>
     `;
 }
 
-// Audit Trail Page
+// Audit Trail Page (keeping existing implementation but simplified)
 function AuditPage() {
     const [events, setEvents] = useState([]);
-    const [selectedEvent, setSelectedEvent] = useState(null);
     const [chainVerification, setChainVerification] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState({
-        event_type: '',
-        user: '',
-        entity_type: '',
-        date_from: '',
-        date_to: ''
-    });
 
     useEffect(() => {
         loadEvents();
@@ -370,12 +1436,7 @@ function AuditPage() {
     const loadEvents = async () => {
         try {
             setLoading(true);
-            const params = new URLSearchParams();
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value) params.append(key, value);
-            });
-            
-            const eventsRes = await api.get(`/api/audit?${params}`);
+            const eventsRes = await api.get('/api/audit');
             setEvents(eventsRes.events);
         } catch (error) {
             console.error('Failed to load audit events:', error);
@@ -393,190 +1454,80 @@ function AuditPage() {
         }
     };
 
-    const viewEventDetail = async (eventId) => {
-        try {
-            const eventDetail = await api.get(`/api/audit/${eventId}`);
-            setSelectedEvent(eventDetail);
-        } catch (error) {
-            console.error('Failed to load event detail:', error);
-        }
-    };
-
-    const applyFilters = () => {
-        loadEvents();
-    };
-
-    if (selectedEvent) {
-        return html`
-            <div>
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Audit Event Detail</h2>
-                    <button
-                        class="px-4 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
-                        onClick=${() => setSelectedEvent(null)}
-                    >
-                        Back to Audit Trail
-                    </button>
-                </div>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">Event Information</h3>
-                        <div class="space-y-2">
-                            <p><strong>Event ID:</strong> <span class="font-mono text-sm">${selectedEvent.event.id}</span></p>
-                            <p><strong>Timestamp:</strong> ${formatDate(selectedEvent.event.timestamp)}</p>
-                            <p><strong>Event Type:</strong> ${selectedEvent.event.event_type}</p>
-                            <p><strong>Entity:</strong> ${selectedEvent.event.entity_type}/${selectedEvent.event.entity_id}</p>
-                            <p><strong>User:</strong> ${selectedEvent.event.username}</p>
-                            <p><strong>Description:</strong> ${selectedEvent.event.description}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">Hash Chain Verification</h3>
-                        <div class="space-y-2">
-                            <p><strong>Current Hash:</strong></p>
-                            <p class="font-mono text-xs bg-gray-100 p-2 rounded break-all">${selectedEvent.event.hash}</p>
-                            <p><strong>Previous Hash:</strong></p>
-                            <p class="font-mono text-xs bg-gray-100 p-2 rounded break-all">${selectedEvent.event.previous_hash || 'N/A (First event)'}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="card p-6 lg:col-span-2">
-                        <h3 class="text-lg font-semibold mb-4">Event Data</h3>
-                        <pre class="bg-gray-100 p-4 rounded text-xs overflow-x-auto">${JSON.stringify(selectedEvent.event.data, null, 2)}</pre>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
+    if (loading) return html`<div class="loading">Loading audit trail...</div>`;
 
     return html`
         <div>
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-2xl font-bold text-gray-800">Audit Trail</h2>
-                <div class="flex items-center space-x-4">
+            <div class="content-header">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h1 class="page-title">Audit Trail</h1>
+                        <p class="page-subtitle">System audit log and hash chain verification</p>
+                    </div>
                     ${chainVerification && html`
-                        <div class="flex items-center space-x-2">
-                            <span class="${chainVerification.chain_valid ? 'hash-chain-valid' : 'hash-chain-invalid'} font-medium">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-weight: 600; color: ${chainVerification.chain_valid ? '#16a34a' : '#dc2626'};">
                                 Chain Status: ${chainVerification.chain_valid ? 'Valid' : 'Invalid'}
                             </span>
-                            <div class="${chainVerification.chain_valid ? 'bg-green-500' : 'bg-red-500'} w-3 h-3 rounded-full"></div>
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background: ${chainVerification.chain_valid ? '#16a34a' : '#dc2626'};"></div>
                         </div>
                     `}
                 </div>
             </div>
 
-            <div class="card mb-6">
-                <div class="p-6">
-                    <h3 class="text-lg font-semibold mb-4">Filters</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <input
-                            type="text"
-                            placeholder="Event Type"
-                            class="px-3 py-2 border rounded-md text-sm"
-                            value=${filters.event_type}
-                            onChange=${e => setFilters({...filters, event_type: e.target.value})}
-                        />
-                        <input
-                            type="text"
-                            placeholder="User"
-                            class="px-3 py-2 border rounded-md text-sm"
-                            value=${filters.user}
-                            onChange=${e => setFilters({...filters, user: e.target.value})}
-                        />
-                        <input
-                            type="text"
-                            placeholder="Entity Type"
-                            class="px-3 py-2 border rounded-md text-sm"
-                            value=${filters.entity_type}
-                            onChange=${e => setFilters({...filters, entity_type: e.target.value})}
-                        />
-                        <input
-                            type="date"
-                            class="px-3 py-2 border rounded-md text-sm"
-                            value=${filters.date_from}
-                            onChange=${e => setFilters({...filters, date_from: e.target.value})}
-                        />
-                        <button
-                            class="btn-primary px-4 py-2 text-white rounded-md text-sm hover:bg-blue-700"
-                            onClick=${applyFilters}
-                        >
-                            Apply Filters
-                        </button>
-                    </div>
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Audit Events</h3>
                 </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Event Type</th>
+                            <th>User</th>
+                            <th>Entity</th>
+                            <th>Description</th>
+                            <th>Hash</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${events.map(event => html`
+                            <tr key=${event.id}>
+                                <td>${formatDate(event.timestamp)}</td>
+                                <td>
+                                    <span class="status-badge status-current">${event.event_type}</span>
+                                </td>
+                                <td>${event.username}</td>
+                                <td style="font-family: monospace; font-size: 0.8rem;">
+                                    ${event.entity_type}/${event.entity_id.substring(0, 8)}...
+                                </td>
+                                <td>${event.description}</td>
+                                <td style="font-family: monospace; font-size: 0.8rem;">
+                                    ${event.hash.substring(0, 8)}...
+                                </td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
             </div>
-
-            ${loading ? html`<div class="text-center py-8">Loading audit events...</div>` : html`
-                <div class="card">
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hash</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${events.map(event => html`
-                                    <tr key=${event.id}>
-                                        <td class="px-6 py-4 text-sm">${formatDate(event.timestamp)}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                                                ${event.event_type}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${event.username}</td>
-                                        <td class="px-6 py-4 text-sm">${event.entity_type}/${event.entity_id.substring(0, 8)}...</td>
-                                        <td class="px-6 py-4 text-sm">${event.description}</td>
-                                        <td class="px-6 py-4 font-mono text-xs">${event.hash.substring(0, 8)}...</td>
-                                        <td class="px-6 py-4">
-                                            <button
-                                                class="text-blue-600 hover:text-blue-800 text-sm"
-                                                onClick=${() => viewEventDetail(event.id)}
-                                            >
-                                                View Details
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `}
         </div>
     `;
 }
 
-// Workflows Page
+// Workflows Page (simplified version)
 function WorkflowsPage() {
     const [workflows, setWorkflows] = useState([]);
-    const [definitions, setDefinitions] = useState([]);
-    const [selectedWorkflow, setSelectedWorkflow] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('active');
 
     useEffect(() => {
-        loadData();
+        loadWorkflows();
     }, []);
 
-    const loadData = async () => {
+    const loadWorkflows = async () => {
         try {
             setLoading(true);
-            const [workflowsRes, definitionsRes] = await Promise.all([
-                api.get('/api/workflows'),
-                api.get('/api/workflows/definitions')
-            ]);
-            
+            const workflowsRes = await api.get('/api/workflows');
             setWorkflows(workflowsRes.workflows);
-            setDefinitions(definitionsRes.definitions);
         } catch (error) {
             console.error('Failed to load workflows:', error);
         } finally {
@@ -584,268 +1535,63 @@ function WorkflowsPage() {
         }
     };
 
-    const viewWorkflowDetail = async (workflowId) => {
-        try {
-            const workflowDetail = await api.get(`/api/workflows/${workflowId}`);
-            setSelectedWorkflow(workflowDetail);
-        } catch (error) {
-            console.error('Failed to load workflow detail:', error);
-        }
-    };
-
-    const approveStep = async (workflowId, comments = '') => {
-        try {
-            await api.post(`/api/workflows/${workflowId}/approve`, {
-                comments,
-                user_id: 'current-user' // In real app, get from auth
-            });
-            
-            // Reload workflow detail
-            viewWorkflowDetail(workflowId);
-            
-            // Reload workflows list
-            loadData();
-        } catch (error) {
-            console.error('Failed to approve step:', error);
-            alert('Failed to approve step: ' + error.message);
-        }
-    };
-
-    if (loading) return html`<div class="text-center py-8">Loading workflows...</div>`;
-
-    if (selectedWorkflow) {
-        const { workflow, steps, current_step_id } = selectedWorkflow;
-        const currentStep = steps.find(s => s.id === current_step_id);
-
-        return html`
-            <div>
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Workflow Detail</h2>
-                    <button
-                        class="px-4 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
-                        onClick=${() => setSelectedWorkflow(null)}
-                    >
-                        Back to Workflows
-                    </button>
-                </div>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2">
-                        <div class="card p-6 mb-6">
-                            <h3 class="text-lg font-semibold mb-4">Workflow Information</h3>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p><strong>Type:</strong> ${workflow.type}</p>
-                                    <p><strong>Entity:</strong> ${workflow.entity_type}/${workflow.entity_id}</p>
-                                    <p><strong>Status:</strong> 
-                                        <span class="status-${workflow.status}">${workflow.status}</span>
-                                    </p>
-                                </div>
-                                <div>
-                                    <p><strong>Started:</strong> ${formatDate(workflow.created_at)}</p>
-                                    <p><strong>SLA Deadline:</strong> ${formatDate(workflow.sla_deadline)}</p>
-                                    <p><strong>Initiated By:</strong> ${workflow.initiated_by}</p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="card p-6">
-                            <h3 class="text-lg font-semibold mb-4">Step Timeline</h3>
-                            <div class="space-y-4">
-                                ${steps.map((step, index) => html`
-                                    <div key=${step.id} class="flex items-start space-x-4">
-                                        <div class="flex-shrink-0">
-                                            <div class="${step.status === 'completed' ? 'bg-green-500' : step.status === 'in_progress' ? 'bg-blue-500' : 'bg-gray-300'} w-4 h-4 rounded-full"></div>
-                                        </div>
-                                        <div class="flex-1">
-                                            <div class="flex items-center justify-between">
-                                                <h4 class="font-medium">${step.name}</h4>
-                                                <span class="status-${step.status} text-sm">${step.status}</span>
-                                            </div>
-                                            <p class="text-sm text-gray-600">${step.step_type}</p>
-                                            <p class="text-xs text-gray-500">Created: ${formatDate(step.created_at)}</p>
-                                            ${step.completed_at && html`
-                                                <p class="text-xs text-gray-500">Completed: ${formatDate(step.completed_at)}</p>
-                                            `}
-                                            ${step.comments && html`
-                                                <p class="text-sm mt-2 p-2 bg-gray-50 rounded">${step.comments}</p>
-                                            `}
-                                        </div>
-                                    </div>
-                                `)}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="space-y-6">
-                        ${currentStep && currentStep.status === 'pending' && html`
-                            <div class="card p-6">
-                                <h3 class="text-lg font-semibold mb-4">Actions</h3>
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-medium mb-2">Comments</label>
-                                        <textarea
-                                            id="step-comments"
-                                            rows="3"
-                                            class="w-full px-3 py-2 border rounded-md text-sm"
-                                            placeholder="Add comments for this approval..."
-                                        ></textarea>
-                                    </div>
-                                    <button
-                                        class="w-full btn-primary px-4 py-2 text-white rounded-md hover:bg-blue-700"
-                                        onClick=${() => {
-                                            const comments = document.getElementById('step-comments').value;
-                                            approveStep(workflow.id, comments);
-                                        }}
-                                    >
-                                        Approve Step
-                                    </button>
-                                </div>
-                            </div>
-                        `}
-                        
-                        <div class="card p-6">
-                            <h3 class="text-lg font-semibold mb-4">Current Status</h3>
-                            ${currentStep ? html`
-                                <div class="space-y-2">
-                                    <p><strong>Current Step:</strong> ${currentStep.name}</p>
-                                    <p><strong>Assigned To:</strong> ${currentStep.assigned_to || 'Unassigned'}</p>
-                                    <p><strong>Status:</strong> 
-                                        <span class="status-${currentStep.status}">${currentStep.status}</span>
-                                    </p>
-                                </div>
-                            ` : html`
-                                <p class="text-gray-600">Workflow completed</p>
-                            `}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
+    if (loading) return html`<div class="loading">Loading workflows...</div>`;
 
     return html`
         <div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">Workflows</h2>
-            
-            <div class="mb-6">
-                <nav class="flex space-x-1">
-                    ${['active', 'definitions'].map(tab => html`
-                        <button
-                            key=${tab}
-                            class="px-4 py-2 text-sm font-medium rounded-lg ${activeTab === tab ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}"
-                            onClick=${() => setActiveTab(tab)}
-                        >
-                            ${tab === 'active' ? 'Active Workflows' : 'Workflow Definitions'}
-                        </button>
-                    `)}
-                </nav>
+            <div class="content-header">
+                <h1 class="page-title">Workflows</h1>
+                <p class="page-subtitle">Active workflow instances</p>
             </div>
-
-            ${activeTab === 'active' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">Active Workflow Instances</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Step</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA Deadline</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${workflows.map(workflow => html`
-                                    <tr key=${workflow.id}>
-                                        <td class="px-6 py-4">
-                                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
-                                                ${workflow.type}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${workflow.entity_type}/${workflow.entity_id.substring(0, 8)}...</td>
-                                        <td class="px-6 py-4">
-                                            <span class="status-${workflow.status} font-medium">${workflow.status}</span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${workflow.current_step || 'N/A'}</td>
-                                        <td class="px-6 py-4 text-sm">${formatDate(workflow.created_at)}</td>
-                                        <td class="px-6 py-4 text-sm">${formatDate(workflow.sla_deadline)}</td>
-                                        <td class="px-6 py-4">
-                                            <button
-                                                class="text-blue-600 hover:text-blue-800 text-sm"
-                                                onClick=${() => viewWorkflowDetail(workflow.id)}
-                                            >
-                                                View Details
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
+            
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Active Workflows</h3>
                 </div>
-            `}
-
-            ${activeTab === 'definitions' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">Workflow Definitions</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Steps</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${definitions.map(definition => html`
-                                    <tr key=${definition.id}>
-                                        <td class="px-6 py-4 font-medium">${definition.name}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                                                ${definition.workflow_type}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${definition.description}</td>
-                                        <td class="px-6 py-4 text-sm">${definition.step_count} steps</td>
-                                        <td class="px-6 py-4">
-                                            <span class="${definition.is_active ? 'text-green-600' : 'text-gray-500'} text-sm">
-                                                ${definition.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Entity</th>
+                            <th>Status</th>
+                            <th>Current Step</th>
+                            <th>Started</th>
+                            <th>SLA Deadline</th>
+                            <th>Initiated By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${workflows.map(workflow => html`
+                            <tr key=${workflow.id}>
+                                <td>
+                                    <span class="status-badge status-current">${workflow.type}</span>
+                                </td>
+                                <td style="font-family: monospace; font-size: 0.8rem;">
+                                    ${workflow.entity_type}/${workflow.entity_id.substring(0, 8)}...
+                                </td>
+                                <td>
+                                    <span class="status-badge ${workflow.status === 'active' ? 'status-active' : 'status-pending'}">
+                                        ${workflow.status}
+                                    </span>
+                                </td>
+                                <td>${workflow.current_step || 'N/A'}</td>
+                                <td>${formatDate(workflow.created_at)}</td>
+                                <td>${formatDate(workflow.sla_deadline)}</td>
+                                <td>${workflow.initiated_by}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
 
-// Notifications Page
+// Notifications Page (simplified version)
 function NotificationsPage() {
     const [notifications, setNotifications] = useState([]);
-    const [templates, setTemplates] = useState([]);
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('log');
-    const [filters, setFilters] = useState({
-        status: '',
-        channel: '',
-        type: ''
-    });
 
     useEffect(() => {
         loadData();
@@ -854,14 +1600,12 @@ function NotificationsPage() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [notificationsRes, templatesRes, statsRes] = await Promise.all([
+            const [notificationsRes, statsRes] = await Promise.all([
                 api.get('/api/notifications'),
-                api.get('/api/notifications/templates'),
                 api.get('/api/notifications/stats')
             ]);
             
             setNotifications(notificationsRes.notifications);
-            setTemplates(templatesRes.templates);
             setStats(statsRes);
         } catch (error) {
             console.error('Failed to load notifications:', error);
@@ -870,206 +1614,91 @@ function NotificationsPage() {
         }
     };
 
-    const applyFilters = async () => {
-        try {
-            const params = new URLSearchParams();
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value) params.append(key, value);
-            });
-            
-            const notificationsRes = await api.get(`/api/notifications?${params}`);
-            setNotifications(notificationsRes.notifications);
-        } catch (error) {
-            console.error('Failed to load filtered notifications:', error);
-        }
-    };
-
-    if (loading) return html`<div class="text-center py-8">Loading notifications...</div>`;
+    if (loading) return html`<div class="loading">Loading notifications...</div>`;
 
     return html`
         <div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">Notifications</h2>
+            <div class="content-header">
+                <h1 class="page-title">Notifications</h1>
+                <p class="page-subtitle">System notifications and messaging</p>
+            </div>
             
             ${stats && html`
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="card p-4">
-                        <div class="text-2xl font-bold text-green-600">${stats.sent || 0}</div>
-                        <div class="text-sm text-gray-600">Sent</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Sent</h3>
+                        </div>
+                        <div class="stat-value amount-positive">${stats.sent || 0}</div>
                     </div>
-                    <div class="card p-4">
-                        <div class="text-2xl font-bold text-blue-600">${stats.delivered || 0}</div>
-                        <div class="text-sm text-gray-600">Delivered</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Delivered</h3>
+                        </div>
+                        <div class="stat-value amount-positive">${stats.delivered || 0}</div>
                     </div>
-                    <div class="card p-4">
-                        <div class="text-2xl font-bold text-red-600">${stats.failed || 0}</div>
-                        <div class="text-sm text-gray-600">Failed</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Failed</h3>
+                        </div>
+                        <div class="stat-value amount-negative">${stats.failed || 0}</div>
                     </div>
-                    <div class="card p-4">
-                        <div class="text-2xl font-bold text-gray-600">${stats.pending || 0}</div>
-                        <div class="text-sm text-gray-600">Pending</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <h3 class="stat-title">Pending</h3>
+                        </div>
+                        <div class="stat-value">${stats.pending || 0}</div>
                     </div>
                 </div>
             `}
             
-            <div class="mb-6">
-                <nav class="flex space-x-1">
-                    ${['log', 'templates'].map(tab => html`
-                        <button
-                            key=${tab}
-                            class="px-4 py-2 text-sm font-medium rounded-lg ${activeTab === tab ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}"
-                            onClick=${() => setActiveTab(tab)}
-                        >
-                            ${tab === 'log' ? 'Notification Log' : 'Templates'}
-                        </button>
-                    `)}
-                </nav>
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Notification Log</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Recipient</th>
+                            <th>Type</th>
+                            <th>Channel</th>
+                            <th>Status</th>
+                            <th>Subject</th>
+                            <th>Created</th>
+                            <th>Sent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${notifications.map(notification => html`
+                            <tr key=${notification.id}>
+                                <td>${notification.recipient}</td>
+                                <td>
+                                    <span class="status-badge status-current">${notification.type}</span>
+                                </td>
+                                <td>
+                                    <span class="status-badge status-active">${notification.channel}</span>
+                                </td>
+                                <td>
+                                    <span class="status-badge ${notification.status === 'sent' ? 'status-active' : notification.status === 'failed' ? 'status-overdue' : 'status-pending'}">
+                                        ${notification.status}
+                                    </span>
+                                </td>
+                                <td>${notification.subject}</td>
+                                <td>${formatDate(notification.created_at)}</td>
+                                <td>${formatDate(notification.sent_at)}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
             </div>
-
-            ${activeTab === 'log' && html`
-                <div>
-                    <div class="card mb-6">
-                        <div class="p-6">
-                            <h3 class="text-lg font-semibold mb-4">Filters</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <select
-                                    class="px-3 py-2 border rounded-md text-sm"
-                                    value=${filters.status}
-                                    onChange=${e => setFilters({...filters, status: e.target.value})}
-                                >
-                                    <option value="">All Statuses</option>
-                                    <option value="sent">Sent</option>
-                                    <option value="failed">Failed</option>
-                                    <option value="pending">Pending</option>
-                                </select>
-                                <select
-                                    class="px-3 py-2 border rounded-md text-sm"
-                                    value=${filters.channel}
-                                    onChange=${e => setFilters({...filters, channel: e.target.value})}
-                                >
-                                    <option value="">All Channels</option>
-                                    <option value="email">Email</option>
-                                    <option value="sms">SMS</option>
-                                    <option value="push">Push</option>
-                                    <option value="in_app">In App</option>
-                                </select>
-                                <select
-                                    class="px-3 py-2 border rounded-md text-sm"
-                                    value=${filters.type}
-                                    onChange=${e => setFilters({...filters, type: e.target.value})}
-                                >
-                                    <option value="">All Types</option>
-                                    <option value="transaction_alert">Transaction Alert</option>
-                                    <option value="payment_reminder">Payment Reminder</option>
-                                    <option value="workflow_update">Workflow Update</option>
-                                    <option value="compliance_alert">Compliance Alert</option>
-                                </select>
-                                <button
-                                    class="btn-primary px-4 py-2 text-white rounded-md text-sm hover:bg-blue-700"
-                                    onClick=${applyFilters}
-                                >
-                                    Apply Filters
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="overflow-x-auto">
-                            <table class="w-full">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipient</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channel</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sent</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-200">
-                                    ${notifications.map(notification => html`
-                                        <tr key=${notification.id}>
-                                            <td class="px-6 py-4 text-sm">${notification.recipient}</td>
-                                            <td class="px-6 py-4">
-                                                <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
-                                                    ${notification.type}
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4">
-                                                <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                                                    ${notification.channel}
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4">
-                                                <span class="status-${notification.status} font-medium">
-                                                    ${notification.status}
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4 text-sm">${notification.subject}</td>
-                                            <td class="px-6 py-4 text-sm">${formatDate(notification.created_at)}</td>
-                                            <td class="px-6 py-4 text-sm">${formatDate(notification.sent_at)}</td>
-                                        </tr>
-                                    `)}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            `}
-
-            ${activeTab === 'templates' && html`
-                <div class="card">
-                    <div class="p-6 border-b">
-                        <h3 class="text-lg font-semibold">Notification Templates</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channel</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                ${templates.map(template => html`
-                                    <tr key=${template.id}>
-                                        <td class="px-6 py-4 font-medium">${template.name}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                                                ${template.type}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                                                ${template.channel}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-sm">${template.subject}</td>
-                                        <td class="px-6 py-4">
-                                            <span class="${template.is_active ? 'text-green-600' : 'text-gray-500'} text-sm">
-                                                ${template.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `}
         </div>
     `;
 }
 
-// Compliance Page
+// Compliance Page (simplified version)
 function CompliancePage() {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedAlert, setSelectedAlert] = useState(null);
 
     useEffect(() => {
         loadAlerts();
@@ -1087,134 +1716,90 @@ function CompliancePage() {
         }
     };
 
-    const viewAlertDetail = (alert) => {
-        setSelectedAlert(alert);
-    };
-
-    if (loading) return html`<div class="text-center py-8">Loading compliance data...</div>`;
+    if (loading) return html`<div class="loading">Loading compliance data...</div>`;
 
     const pendingAlerts = alerts.filter(a => a.status === 'pending');
     const resolvedAlerts = alerts.filter(a => a.status === 'resolved');
 
-    if (selectedAlert) {
-        return html`
-            <div>
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Compliance Alert Detail</h2>
-                    <button
-                        class="px-4 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
-                        onClick=${() => setSelectedAlert(null)}
-                    >
-                        Back to Alerts
-                    </button>
-                </div>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">Alert Information</h3>
-                        <div class="space-y-2">
-                            <p><strong>Alert ID:</strong> ${selectedAlert.id}</p>
-                            <p><strong>Customer ID:</strong> ${selectedAlert.customer_id}</p>
-                            <p><strong>Type:</strong> ${selectedAlert.alert_type}</p>
-                            <p><strong>Severity:</strong> 
-                                <span class="text-${selectedAlert.severity === 'high' ? 'red' : selectedAlert.severity === 'medium' ? 'yellow' : 'green'}-600 font-medium">
-                                    ${selectedAlert.severity}
-                                </span>
-                            </p>
-                            <p><strong>Status:</strong> 
-                                <span class="status-${selectedAlert.status}">${selectedAlert.status}</span>
-                            </p>
-                            <p><strong>Risk Score:</strong> ${selectedAlert.risk_score}/100</p>
-                            <p><strong>Created:</strong> ${formatDate(selectedAlert.created_at)}</p>
-                            ${selectedAlert.resolved_at && html`
-                                <p><strong>Resolved:</strong> ${formatDate(selectedAlert.resolved_at)}</p>
-                            `}
-                        </div>
-                    </div>
-                    
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">Description</h3>
-                        <p class="text-sm">${selectedAlert.description}</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
     return html`
         <div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">Compliance</h2>
+            <div class="content-header">
+                <h1 class="page-title">Compliance</h1>
+                <p class="page-subtitle">Compliance monitoring and alerts</p>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div class="card p-4">
-                    <div class="text-2xl font-bold text-red-600">${pendingAlerts.length}</div>
-                    <div class="text-sm text-gray-600">Pending Alerts</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Pending Alerts</h3>
+                    </div>
+                    <div class="stat-value amount-negative">${pendingAlerts.length}</div>
+                    <div class="stat-change">Require attention</div>
                 </div>
-                <div class="card p-4">
-                    <div class="text-2xl font-bold text-green-600">${resolvedAlerts.length}</div>
-                    <div class="text-sm text-gray-600">Resolved Alerts</div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Resolved Alerts</h3>
+                    </div>
+                    <div class="stat-value amount-positive">${resolvedAlerts.length}</div>
+                    <div class="stat-change">Closed cases</div>
                 </div>
-                <div class="card p-4">
-                    <div class="text-2xl font-bold text-gray-600">${alerts.length}</div>
-                    <div class="text-sm text-gray-600">Total Alerts</div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <h3 class="stat-title">Total Alerts</h3>
+                    </div>
+                    <div class="stat-value">${alerts.length}</div>
+                    <div class="stat-change">All time</div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="p-6 border-b">
-                    <h3 class="text-lg font-semibold">Compliance Alerts</h3>
+            <div class="data-table">
+                <div class="table-header">
+                    <h3 class="table-title">Compliance Alerts</h3>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Risk Score</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer ID</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Risk Score</th>
+                            <th>Created</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${alerts.map(alert => html`
+                            <tr key=${alert.id}>
+                                <td style="font-family: monospace; font-size: 0.8rem;">
+                                    ${alert.customer_id.substring(0, 8)}...
+                                </td>
+                                <td>
+                                    <span class="status-badge status-current">${alert.alert_type}</span>
+                                </td>
+                                <td class="${alert.severity === 'high' ? 'priority-5' : alert.severity === 'medium' ? 'priority-3' : 'priority-1'}">
+                                    ${alert.severity}
+                                </td>
+                                <td>
+                                    <span class="status-badge ${alert.status === 'pending' ? 'status-pending' : 'status-active'}">
+                                        ${alert.status}
+                                    </span>
+                                </td>
+                                <td class="${alert.risk_score >= 80 ? 'priority-5' : alert.risk_score >= 60 ? 'priority-3' : 'priority-1'}">
+                                    ${alert.risk_score}/100
+                                </td>
+                                <td>${formatDate(alert.created_at)}</td>
+                                <td>${alert.description}</td>
                             </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            ${alerts.map(alert => html`
-                                <tr key=${alert.id}>
-                                    <td class="px-6 py-4 text-sm font-mono">${alert.customer_id.substring(0, 8)}...</td>
-                                    <td class="px-6 py-4">
-                                        <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">
-                                            ${alert.alert_type}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="text-${alert.severity === 'high' ? 'red' : alert.severity === 'medium' ? 'yellow' : 'green'}-600 font-medium text-sm">
-                                            ${alert.severity}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="status-${alert.status} font-medium">${alert.status}</span>
-                                    </td>
-                                    <td class="px-6 py-4 text-sm">${alert.risk_score}/100</td>
-                                    <td class="px-6 py-4 text-sm">${formatDate(alert.created_at)}</td>
-                                    <td class="px-6 py-4">
-                                        <button
-                                            class="text-blue-600 hover:text-blue-800 text-sm"
-                                            onClick=${() => viewAlertDetail(alert)}
-                                        >
-                                            View Details
-                                        </button>
-                                    </td>
-                                </tr>
-                            `)}
-                        </tbody>
-                    </table>
-                </div>
+                        `)}
+                    </tbody>
+                </table>
             </div>
         </div>
     `;
 }
 
-// Settings Page
+// Settings Page (simplified version)
 function SettingsPage() {
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1235,103 +1820,48 @@ function SettingsPage() {
         }
     };
 
-    if (loading) return html`<div class="text-center py-8">Loading system settings...</div>`;
+    if (loading) return html`<div class="loading">Loading system settings...</div>`;
 
     return html`
         <div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">System Settings</h2>
+            <div class="content-header">
+                <h1 class="page-title">Settings</h1>
+                <p class="page-subtitle">System configuration and status</p>
+            </div>
             
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">Database</h3>
-                    <div class="space-y-2">
-                        <p><strong>Type:</strong> ${settings.database.type}</p>
-                        <p><strong>Status:</strong> 
-                            <span class="${settings.database.status === 'Connected' ? 'text-green-600' : 'text-red-600'}">
-                                ${settings.database.status}
-                            </span>
-                        </p>
-                        <p><strong>Size:</strong> ${settings.database.size_mb} MB</p>
-                        <p><strong>Path:</strong> <span class="font-mono text-sm">${settings.database.path}</span></p>
+            <div class="detail-grid">
+                <div class="detail-card">
+                    <div class="detail-label">Database Type</div>
+                    <div class="detail-value">${settings.database.type}</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Database Status</div>
+                    <div class="detail-value">
+                        <span class="status-badge ${settings.database.status === 'Connected' ? 'status-active' : 'status-overdue'}">
+                            ${settings.database.status}
+                        </span>
                     </div>
                 </div>
-                
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">Encryption</h3>
-                    <div class="space-y-2">
-                        <p><strong>Status:</strong> 
-                            <span class="${settings.encryption.status === 'Enabled' ? 'text-green-600' : 'text-gray-600'}">
-                                ${settings.encryption.status}
-                            </span>
-                        </p>
-                        <p><strong>Algorithm:</strong> ${settings.encryption.algorithm}</p>
+                <div class="detail-card">
+                    <div class="detail-label">Database Size</div>
+                    <div class="detail-value">${settings.database.size_mb} MB</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Encryption Status</div>
+                    <div class="detail-value">
+                        <span class="status-badge ${settings.encryption.status === 'Enabled' ? 'status-active' : 'status-inactive'}">
+                            ${settings.encryption.status}
+                        </span>
                     </div>
                 </div>
-                
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">Kafka Integration</h3>
-                    <div class="space-y-2">
-                        <p><strong>Status:</strong> 
-                            <span class="${settings.kafka.status === 'Connected' ? 'text-green-600' : 'text-gray-600'}">
-                                ${settings.kafka.status}
-                            </span>
-                        </p>
-                        <p><strong>Brokers:</strong> ${settings.kafka.brokers.length > 0 ? settings.kafka.brokers.join(', ') : 'None configured'}</p>
-                    </div>
+                <div class="detail-card">
+                    <div class="detail-label">System Version</div>
+                    <div class="detail-value">${settings.system.version}</div>
                 </div>
-                
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">System Information</h3>
-                    <div class="space-y-2">
-                        <p><strong>Version:</strong> ${settings.system.version}</p>
-                        <p><strong>Started:</strong> ${formatDate(settings.system.started_at)}</p>
-                        <p><strong>Uptime:</strong> ${settings.system.uptime_hours} hours</p>
-                    </div>
+                <div class="detail-card">
+                    <div class="detail-label">System Uptime</div>
+                    <div class="detail-value">${settings.system.uptime_hours} hours</div>
                 </div>
-                
-                ${settings.tenancy && html`
-                    <div class="card p-6 ${settings.tenancy.enabled ? 'lg:col-span-2' : ''}">
-                        <h3 class="text-lg font-semibold mb-4">Multi-Tenancy</h3>
-                        ${settings.tenancy.enabled ? html`
-                            <div class="space-y-4">
-                                <p><strong>Status:</strong> <span class="text-green-600">Enabled</span></p>
-                                <p><strong>Total Tenants:</strong> ${settings.tenancy.tenant_count}</p>
-                                
-                                ${settings.tenancy.tenants.length > 0 && html`
-                                    <div>
-                                        <strong>Tenants:</strong>
-                                        <div class="mt-2">
-                                            <table class="w-full text-sm">
-                                                <thead class="bg-gray-50">
-                                                    <tr>
-                                                        <th class="px-4 py-2 text-left">Name</th>
-                                                        <th class="px-4 py-2 text-left">Status</th>
-                                                        <th class="px-4 py-2 text-left">Created</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    ${settings.tenancy.tenants.map(tenant => html`
-                                                        <tr key=${tenant.id} class="border-t">
-                                                            <td class="px-4 py-2">${tenant.name}</td>
-                                                            <td class="px-4 py-2">
-                                                                <span class="${tenant.is_active ? 'text-green-600' : 'text-gray-500'}">
-                                                                    ${tenant.is_active ? 'Active' : 'Inactive'}
-                                                                </span>
-                                                            </td>
-                                                            <td class="px-4 py-2">${formatDate(tenant.created_at)}</td>
-                                                        </tr>
-                                                    `)}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                `}
-                            </div>
-                        ` : html`
-                            <p><strong>Status:</strong> <span class="text-gray-600">Disabled</span></p>
-                        `}
-                    </div>
-                `}
             </div>
         </div>
     `;
@@ -1339,22 +1869,30 @@ function SettingsPage() {
 
 // Main App Component
 function App() {
-    const [currentPage, setCurrentPage] = useState('users');
+    const [currentPage, setCurrentPage] = useState('overview'); // Changed default to overview
 
     const renderPage = () => {
         switch (currentPage) {
+            case 'overview': return html`<${OverviewPage} />`;
+            case 'customers': return html`<${CustomersPage} />`;
+            case 'accounts': return html`<${AccountsPage} />`;
+            case 'transactions': return html`<${TransactionsPage} />`;
+            case 'loans': return html`<${LoansPage} />`;
+            case 'credit-lines': return html`<${CreditLinesPage} />`;
+            case 'collections': return html`<${CollectionsPage} />`;
+            case 'products': return html`<${ProductsPage} />`;
             case 'users': return html`<${UsersPage} />`;
             case 'audit': return html`<${AuditPage} />`;
             case 'workflows': return html`<${WorkflowsPage} />`;
             case 'notifications': return html`<${NotificationsPage} />`;
             case 'compliance': return html`<${CompliancePage} />`;
             case 'settings': return html`<${SettingsPage} />`;
-            default: return html`<${UsersPage} />`;
+            default: return html`<${OverviewPage} />`;
         }
     };
 
     return html`
-        <div class="min-h-screen bg-gray-50">
+        <div class="dashboard-container">
             <${Sidebar} currentPage=${currentPage} onPageChange=${setCurrentPage} />
             <${MainContent}>
                 ${renderPage()}

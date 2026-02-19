@@ -23,16 +23,16 @@ from core_banking.currency import Currency
 app = FastAPI(title="Nexum Core Banking Dashboard", version="1.0")
 
 # Initialize storage
-storage = SQLiteStorage("../core_banking.db")
+storage = SQLiteStorage("core_banking.db")
 audit_trail = AuditTrail(storage)
 
 # Serve static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="dashboard/static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve the main dashboard page"""
-    with open("static/index.html", "r") as f:
+    with open("dashboard/static/index.html", "r") as f:
         return f.read()
 
 # Helper function to format currency
@@ -636,6 +636,10 @@ async def get_product_detail(product_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting product detail: {str(e)}")
+
+def create_app():
+    """Create and return the FastAPI app instance"""
+    return app
 
 if __name__ == "__main__":
     import uvicorn

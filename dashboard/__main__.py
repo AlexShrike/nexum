@@ -16,15 +16,15 @@ def main():
     app = create_app()
     
     print("🏦 Nexum Core Banking Dashboard")
-    print("💻 Starting on http://localhost:8892")
-    print("📊 Dashboard: http://localhost:8892/")
-    print("🔌 API docs: http://localhost:8892/docs")
+    print("💻 Starting on http://localhost:8893")
+    print("📊 Dashboard: http://localhost:8893/")
+    print("🔌 API docs: http://localhost:8893/docs")
     print("🛑 Press Ctrl+C to stop")
     
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8892,
+        port=8893,
         reload=False,
         access_log=False
     )
