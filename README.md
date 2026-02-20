@@ -162,7 +162,7 @@ The system provides a complete banking infrastructure with fraud detection, mult
 | `event_hooks.py` | Kafka event hooks for real-time system integration |
 
 📖 **Full guides:**
-- [Module Documentation](docs/modules/) — Individual module documentation
+- Module Documentation — See individual module guides below
 - [Best Practices](docs/BEST_PRACTICES.md) — Module integration patterns
 
 ---
@@ -211,9 +211,7 @@ Comprehensive **14-page SPA** operations dashboard providing complete visibility
 
 **Tech Stack:** Preact + HTM frontend (no build step), FastAPI backend, WebSocket real-time updates
 
-📖 **Full guides:**
-- [Production Dashboard](docs/PRODUCTION_DASHBOARD.md) — Complete operations guide
-- [Demo UI](docs/DEMO_UI.md) — UI components and interaction patterns
+📖 **Full guide:** [Deployment Guide](docs/DEPLOYMENT.md) — Production deployment and dashboard setup
 
 ---
 
@@ -450,7 +448,7 @@ When Bastion is unavailable:
 - Automatic retry with exponential backoff
 - Alert generation for service degradation
 
-📖 **Full guide:** [Bastion Integration](docs/NEXUM_INTEGRATION.md) — Complete fraud detection setup
+📖 **Full guide:** [Kafka Integration](docs/KAFKA_INTEGRATION.md) — Complete event bridge setup
 
 ---
 
@@ -554,7 +552,7 @@ export NEXUM_BASTION_REVIEW_THRESHOLD="30"
 - **Fraud model drift detection** — Score distribution monitoring
 
 📖 **Full guides:**
-- [Nexum Integration Guide](docs/NEXUM_INTEGRATION.md) — Complete setup and configuration
+- [Kafka Integration Guide](docs/KAFKA_INTEGRATION.md) — Complete event bridge setup
 - [Kafka Integration](docs/KAFKA_INTEGRATION.md) — Event streaming patterns
 
 ---
