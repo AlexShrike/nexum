@@ -54,6 +54,12 @@ class NexumConfig(BaseSettings):
     encryption_master_key: str = ""  # NEXUM_ENCRYPTION_MASTER_KEY env var
     encryption_provider: str = "fernet"  # fernet, aesgcm, noop
     
+    # Bastion fraud detection configuration
+    bastion_url: str = ""  # Empty = disabled. Set to http://localhost:8080
+    bastion_timeout: float = 2.0
+    bastion_api_key: str = ""
+    bastion_fallback: str = "APPROVE"  # What to do if Bastion is down
+    
     # Feature flags
     enable_audit_logging: bool = True
     enable_kafka_events: bool = False

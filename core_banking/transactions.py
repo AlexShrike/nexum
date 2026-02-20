@@ -158,7 +158,8 @@ class TransactionProcessor:
         customer_manager: CustomerManager,
         compliance_engine: ComplianceEngine,
         audit_trail: AuditTrail,
-        event_dispatcher: Optional['EventDispatcher'] = None
+        event_dispatcher: Optional['EventDispatcher'] = None,
+        fraud_client: Optional['BastionClient'] = None
     ):
         self.storage = storage
         self.ledger = ledger
@@ -166,6 +167,7 @@ class TransactionProcessor:
         self.customer_manager = customer_manager
         self.compliance_engine = compliance_engine
         self.audit_trail = audit_trail
+        self.fraud_client = fraud_client  # BastionClient or None
         self.table_name = "transactions"
         self.logger = get_logger("nexum.transactions")
         
@@ -319,6 +321,60 @@ class TransactionProcessor:
                 transaction.state = TransactionState.PROCESSING
                 transaction.updated_at = datetime.now(timezone.utc)
                 self._save_transaction(transaction)
+                
+                # Run fraud scoring (BEFORE compliance checks and posting)
+                # Skip fraud scoring for system transactions and reversals
+                if (self.fraud_client and 
+                    transaction.channel != TransactionChannel.SYSTEM and
+                    transaction.transaction_type != TransactionType.REVERSAL):
+                    fraud_result = self.fraud_client.score_transaction({
+                        "transaction_id": transaction.id,
+                        "amount": str(transaction.amount.amount),
+                        "currency": transaction.amount.currency.code,
+                        "customer_id": transaction.from_account_id or transaction.to_account_id,
+                        "channel": transaction.channel.value,
+                        "transaction_type": transaction.transaction_type.value,
+                        "description": transaction.description
+                    })
+                    
+                    # Store fraud score on transaction metadata
+                    transaction.metadata = transaction.metadata or {}
+                    transaction.metadata["fraud_score"] = fraud_result.score
+                    transaction.metadata["fraud_decision"] = fraud_result.decision
+                    transaction.metadata["fraud_reasons"] = fraud_result.reasons
+                    transaction.metadata["fraud_latency_ms"] = fraud_result.latency_ms
+                    
+                    if fraud_result.decision == "BLOCK":
+                        # Reject the transaction
+                        transaction.state = TransactionState.FAILED
+                        transaction.error_message = "Blocked by fraud detection"
+                        transaction.metadata["rejection_reason"] = "fraud_detected"
+                        transaction.processed_at = datetime.now(timezone.utc)
+                        transaction.updated_at = transaction.processed_at
+                        self._save_transaction(transaction)
+                        
+                        # Log audit event
+                        self.audit_trail.log_event(
+                            event_type=AuditEventType.TRANSACTION_FAILED,
+                            entity_type="transaction",
+                            entity_id=transaction.id,
+                            metadata={
+                                "error_message": "Blocked by fraud detection",
+                                "fraud_score": fraud_result.score,
+                                "fraud_reasons": fraud_result.reasons,
+                                "failed_at": transaction.processed_at.isoformat()
+                            }
+                        )
+                        
+                        # Publish domain event (Phase 2)
+                        if DomainEvent:
+                            self._publish_event(DomainEvent.TRANSACTION_FAILED, transaction)
+                        
+                        raise ValueError("Blocked by fraud detection")
+                        
+                    elif fraud_result.decision == "REVIEW":
+                        # Flag for manual review but still process
+                        transaction.metadata["needs_review"] = True
                 
                 # Run compliance checks (skip for system transactions and reversals)
                 if (not transaction.compliance_checked and 

@@ -18,6 +18,8 @@ from ..reporting import ReportingEngine
 from ..workflows import WorkflowEngine
 from ..rbac import RBACManager
 from ..custom_fields import CustomFieldManager
+from ..fraud_client import BastionClient
+from ..config import get_config
 
 
 class BankingSystem:
@@ -36,9 +38,14 @@ class BankingSystem:
         self.account_manager = AccountManager(self.storage, self.ledger, self.audit_trail)
         self.customer_manager = CustomerManager(self.storage, self.audit_trail)
         self.compliance_engine = ComplianceEngine(self.storage, self.customer_manager, self.audit_trail)
+        
+        # Initialize fraud client if configured
+        fraud_client = self._create_fraud_client()
+        
         self.transaction_processor = TransactionProcessor(
             self.storage, self.ledger, self.account_manager, 
-            self.customer_manager, self.compliance_engine, self.audit_trail
+            self.customer_manager, self.compliance_engine, self.audit_trail,
+            fraud_client=fraud_client
         )
         self.interest_engine = InterestEngine(
             self.storage, self.ledger, self.account_manager,
@@ -66,6 +73,22 @@ class BankingSystem:
         self.workflow_engine = WorkflowEngine(self.storage, self.audit_trail)
         self.rbac_manager = RBACManager(self.storage, self.audit_trail)
         self.custom_field_manager = CustomFieldManager(self.storage, self.audit_trail)
+    
+    def _create_fraud_client(self):
+        """Create fraud client based on configuration"""
+        config = get_config()
+        
+        # Only create fraud client if URL is configured
+        if not config.bastion_url:
+            return None
+        
+        return BastionClient(
+            base_url=config.bastion_url,
+            timeout=config.bastion_timeout,
+            api_key=config.bastion_api_key if config.bastion_api_key else None,
+            enabled=True,
+            fallback_on_error=config.bastion_fallback
+        )
 
 
 # Global banking system instance

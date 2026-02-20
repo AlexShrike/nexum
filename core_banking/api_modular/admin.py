@@ -119,3 +119,55 @@ async def run_interest_accrual(system: BankingSystem = Depends(get_banking_syste
 async def get_system_stats(system: BankingSystem = Depends(get_banking_system)):
     """Get system statistics"""
     pass
+
+
+# Fraud detection endpoints
+@router.get("/fraud/status")
+async def get_fraud_status(system: BankingSystem = Depends(get_banking_system)) -> Dict[str, Any]:
+    """Get Bastion connection status and fraud scoring statistics"""
+    if not system.transaction_processor.fraud_client:
+        return {
+            "fraud_detection_enabled": False,
+            "message": "Fraud client not configured"
+        }
+    
+    fraud_client = system.transaction_processor.fraud_client
+    is_healthy = fraud_client.health_check()
+    
+    # Get some basic stats from recent transactions
+    # This is a simplified implementation - in production would query actual transaction history
+    recent_transactions = system.storage.load_all("transactions")
+    fraud_stats = {
+        "total_scored": 0,
+        "blocked": 0,
+        "reviewed": 0,
+        "approved": 0,
+        "avg_latency_ms": 0.0
+    }
+    
+    total_latency = 0.0
+    for tx_data in recent_transactions[-100:]:  # Last 100 transactions
+        if tx_data.get("metadata", {}).get("fraud_score") is not None:
+            fraud_stats["total_scored"] += 1
+            decision = tx_data.get("metadata", {}).get("fraud_decision", "APPROVE")
+            if decision == "BLOCK":
+                fraud_stats["blocked"] += 1
+            elif decision == "REVIEW":
+                fraud_stats["reviewed"] += 1
+            else:
+                fraud_stats["approved"] += 1
+            
+            latency = tx_data.get("metadata", {}).get("fraud_latency_ms", 0.0)
+            total_latency += latency
+    
+    if fraud_stats["total_scored"] > 0:
+        fraud_stats["avg_latency_ms"] = total_latency / fraud_stats["total_scored"]
+    
+    return {
+        "fraud_detection_enabled": fraud_client.enabled,
+        "bastion_url": fraud_client.base_url,
+        "bastion_healthy": is_healthy,
+        "timeout_seconds": fraud_client.timeout,
+        "fallback_decision": fraud_client.fallback_on_error,
+        "statistics": fraud_stats
+    }
