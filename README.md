@@ -1,312 +1,467 @@
-# Nexum
-### Production-grade core banking system
+<p align="center">
+  <h1 align="center">Nexum</h1>
+  <p align="center"><strong>Production-Grade Core Banking System</strong></p>
+  <p align="center"><em>Enterprise-ready financial infrastructure with built-in fraud detection</em></p>
+</p>
 
-![Nexum Logo](https://via.placeholder.com/150x75/4CAF50/FFFFFF?text=NEXUM)
+---
 
-[![Tests Passing](https://img.shields.io/badge/tests-642%20passing-brightgreen)](./tests/)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-blue)](https://python.org)
-[![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+Nexum is a production-ready core banking platform that processes financial transactions with **double-entry precision** and **immutable audit trails** at enterprise scale. With 29+ specialized modules, 130+ REST endpoints, and comprehensive fraud detection via Bastion integration, it delivers ACID-compliant financial operations with PostgreSQL persistence, multi-tenancy, and real-time event streaming — all deployable via single `docker-compose up`.
 
-## What is Nexum?
+**Status:** Production-ready · 707+ automated tests passing · 29 specialized modules · 130+ API endpoints · 14-page operations dashboard
 
-Nexum is an open-source, modular, API-first core banking system built for production environments. With 29+ specialized modules, 130+ REST endpoints, and 642 comprehensive tests, Nexum provides enterprise-grade financial infrastructure with PostgreSQL support, JWT authentication, and Kafka integration. Built on double-entry accounting principles with hash-chained audit trails, it ensures data integrity and regulatory compliance from day one.
+---
 
-## ✨ Key Features
+## Key Metrics
 
-🏦 **Double-entry ledger** with hash-chained audit trail  
-🔧 **Configurable Product Engine** (launch products without code)  
-💳 **Loan origination & amortization** (French, equal principal, bullet)  
-📊 **Credit line management** (revolving credit, grace periods, statements)  
-⚡ **Collections management** with auto-escalation  
-🌍 **Multi-currency support**  
-🔍 **KYC/AML compliance engine**  
-📈 **Dynamic reporting & analytics**  
-⚙️ **Configurable workflow engine** (approval chains, SLA)  
-🔐 **Role-based access control** (8 roles, 30 permissions)  
-🏷️ **Custom fields** on any entity  
-🚀 **130+ REST API endpoints** with OpenAPI/Swagger docs  
-🏭 **Production-Ready Infrastructure** (PostgreSQL, JWT auth, Kafka events)  
-⚡ **ACID transactions** with migration system  
-📊 **Rate limiting** (60 req/min) and structured JSON logging  
-🔒 **PII Encryption at Rest** (AES-256-GCM/Fernet) for sensitive data  
-🏢 **Multi-Tenancy Support** with tenant isolation and branding  
-📧 **Notification Engine** (Email, SMS, Push, Webhook, In-App)  
-🎯 **Event-Driven Architecture** with Observer pattern (publish/subscribe)
+| Metric | Value |
+|--------|-------|
+| Test Coverage | 707+ tests, all passing |
+| API Endpoints | 130+ REST endpoints with OpenAPI docs |
+| Core Modules | 29+ specialized financial modules |
+| Storage Options | PostgreSQL → SQLite → InMemory (layered) |
+| Lines of Code | ~17K core logic + ~14K test coverage |
+| Transaction Speed | Sub-second ACID transactions |
+| Multi-Tenancy | 3 isolation strategies with encryption |
+| Fraud Detection | Real-time via Bastion integration |
+| Event Topics | 27 Kafka event types |
+| Dashboard Pages | 14 SPA pages (Preact + HTM) |
 
-## 🏭 Production Ready Features
+---
 
-Nexum includes enterprise-grade infrastructure components for production deployment:
+## Architecture
 
-**🔐 Security & Authentication**
-- JWT bearer token authentication with configurable expiry
-- scrypt password hashing (replacing legacy SHA-256)
-- Rate limiting middleware (60 requests/minute per IP)
-- Role-based access control with permission enforcement
-
-**💾 Storage & Data**
-- PostgreSQL backend with JSONB support and GIN indexes
-- ACID transaction support with atomic() context managers
-- Database migration system (8 migrations: v001-v008)
-- SQLite and in-memory storage for testing
-
-**📊 Configuration & Monitoring**
-- Environment-based configuration (NEXUM_* environment variables)
-- Structured JSON logging with configurable levels
-- Modular API architecture (15+ router modules)
-- Comprehensive pagination (skip/limit/total) on list endpoints
-
-**⚡ Event-Driven Architecture**
-- Kafka integration for real-time event streaming
-- Event hooks system for custom business logic
-- CloudEvents-compatible message format
-- Async event processing and publishing
-
-## 🛡️ Fraud Detection Integration (Bastion)
-
-Nexum integrates seamlessly with **Bastion**, a real-time fraud scoring engine, to provide intelligent transaction monitoring and risk assessment.
-
-**🔍 Key Components:**
-- **fraud_client.py** - REST client for real-time fraud scoring
-- **fraud_events.py** - Kafka event publishing for fraud alerts
-
-**⚡ Real-time Processing Flow:**
 ```
-Transaction → fraud_client.py → Bastion /score → Decision → Action
-    ↓              ↓                ↓           ↓        ↓
-  Created    →  Score API    →    Risk Score  → Rule  → APPROVE/REVIEW/BLOCK
+                     ┌─────────────────────────┐
+                     │     FastAPI Gateway     │
+                     │    (130+ endpoints)     │
+                     └────────────┬────────────┘
+                                  │
+                ┌─────────────────┼─────────────────┐
+                │                 │                 │
+     ┌──────────▼──────────┐ ┌────▼────┐ ┌─────────▼─────────┐
+     │  Authentication     │ │ Rate    │ │   RBAC Engine     │
+     │  (JWT + scrypt)     │ │ Limit   │ │  (8 roles/30+     │
+     └──────────┬──────────┘ └────┬────┘ │   permissions)    │
+                │                 │      └─────────┬─────────┘
+                └─────────────────┼──────────────────┘
+                                  │
+                ┌─────────────────▼─────────────────┐
+                │      Transaction Processing       │
+                │   (Deposits, Transfers, Loans)    │
+                └─────────────────┬─────────────────┘
+                                  │
+                ┌─────────────────▼─────────────────┐
+                │      Fraud Detection Layer       │
+                │    (Bastion REST + Kafka)        │
+                └─────────────────┬─────────────────┘
+                                  │
+                ┌─────────────────▼─────────────────┐
+                │      Business Logic Layer        │
+                │ (Ledger, Accounts, Customers,    │
+                │  Loans, Credit, Collections)     │
+                └─────────────────┬─────────────────┘
+                                  │
+          ┌───────────────────────┼───────────────────────┐
+          │                       │                       │
+   ┌──────▼──────┐    ┌──────────▼──────────┐    ┌───────▼────────┐
+   │   Audit     │    │   Event Bus Layer    │    │   Notification │
+   │ (SHA-256    │    │  (27 Kafka topics,   │    │   Engine       │
+   │  chained)   │    │   Observer pattern)  │    │ (5 channels)   │
+   └──────┬──────┘    └──────────┬──────────┘    └───────┬────────┘
+          │                      │                       │
+          └──────────────────────┼───────────────────────┘
+                                 │
+                ┌────────────────▼────────────────┐
+                │        Storage Layer            │
+                │ (Multi-tenant + Encryption)     │
+                └────────────────┬────────────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+  ┌─────▼─────┐        ┌────────▼────────┐      ┌─────────▼──────────┐
+  │PostgreSQL │        │     SQLite      │      │    InMemory        │
+  │(JSONB +   │        │ (WAL + indexes) │      │ (Thread-safe dict) │
+  │GIN index) │        │                 │      │                    │
+  └───────────┘        └─────────────────┘      └────────────────────┘
 ```
 
-**📋 Decision Flow:**
-- **APPROVE** - Low risk score, transaction proceeds automatically
-- **REVIEW** - Medium risk score, flagged for manual review
-- **BLOCK** - High risk score, transaction blocked immediately
+---
 
-**⚙️ Configuration Variables:**
+## Module Overview
+
+### Core Banking (8 modules)
+
+| Module | Description |
+|--------|-------------|
+| `ledger.py` | Double-entry bookkeeping engine with hash-chained audit trail |
+| `accounts.py` | Account management, balance calculations, holds and freezes |
+| `transactions.py` | Transaction processing with ACID compliance and validation |
+| `customers.py` | Customer profiles, KYC management, and beneficiary handling |
+| `credit.py` | Credit line management, statements, and revolving credit |
+| `loans.py` | Loan origination, French amortization, and payment processing |
+| `interest.py` | Interest calculations, daily accrual, and monthly posting |
+| `currency.py` | Multi-currency support with decimal precision |
+
+### Risk & Compliance (4 modules)
+
+| Module | Description |
+|--------|-------------|
+| `compliance.py` | KYC/AML checks, transaction monitoring, and regulatory compliance |
+| `collections.py` | Delinquency management with automated escalation strategies |
+| `audit.py` | Immutable audit trail with SHA-256 hash chaining |
+| `fraud_client.py` | Real-time fraud scoring via Bastion API integration |
+
+### Infrastructure (9 modules)
+
+| Module | Description |
+|--------|-------------|
+| `storage.py` | Pluggable storage abstraction (PostgreSQL/SQLite/InMemory) |
+| `encryption.py` | PII encryption at rest with AES-GCM/Fernet and key rotation |
+| `tenancy.py` | Multi-tenant isolation with 3 strategies and tenant branding |
+| `rbac.py` | Role-based access control with 8 roles and 30+ permissions |
+| `notifications.py` | Multi-channel notification engine (email/SMS/push/webhook/in-app) |
+| `events.py` | Observer pattern implementation for domain events |
+| `workflows.py` | Configurable approval chains with SLA management |
+| `custom_fields.py` | Dynamic field management for entity extension |
+| `api.py` | Main FastAPI application with modular router architecture |
+
+### Integration (8 modules)
+
+| Module | Description |
+|--------|-------------|
+| `kafka_integration.py` | Event streaming support with 27 topic types |
+| `fraud_events.py` | Kafka event publishing for fraud decisions and alerts |
+| `products.py` | Banking product configuration and template engine |
+| `reporting.py` | Report generation, analytics, and custom report definitions |
+| `config.py` | Environment-based configuration management |
+| `migrations.py` | Database migration system with rollback support |
+| `logging_config.py` | Structured JSON logging with correlation IDs |
+| `event_hooks.py` | Kafka event hooks for real-time system integration |
+
+---
+
+## Bastion Integration
+
+Nexum integrates seamlessly with **Bastion** for real-time fraud detection, combining REST-based synchronous scoring with Kafka-based asynchronous event streaming for comprehensive fraud prevention.
+
+### Integration Architecture
+
+```
+Transaction Request
+        │
+        ▼
+┌───────────────────┐    ┌──────────────────────┐
+│  fraud_client.py  │───▶│  Bastion /score API  │
+│                   │◀───│  (REST endpoint)     │
+└───────────────────┘    └──────────────────────┘
+        │                           │
+        ▼                           ▼
+┌───────────────────┐         Risk Score
+│ Decision Engine   │         0-100 scale
+│ • score < 30:     │              │
+│   → APPROVE       │              ▼
+│ • score 30-70:    │    ┌─────────────────────┐
+│   → REVIEW        │    │   Decision Logic    │
+│ • score > 70:     │    │                     │
+│   → BLOCK         │    │ APPROVE → Process   │
+└───────────────────┘    │ REVIEW  → Queue     │
+        │                │ BLOCK   → Reject    │
+        ▼                └─────────────────────┘
+┌───────────────────┐              │
+│ fraud_events.py   │              ▼
+│ (Kafka Publisher) │    ┌─────────────────────┐
+└───────────────────┘    │   Audit Trail       │
+        │                │ (Hash-chained log)  │
+        ▼                └─────────────────────┘
+┌───────────────────┐
+│ Kafka Topics:     │
+│ • bastion.fraud.  │
+│   decisions       │
+│ • bastion.fraud.  │
+│   alerts          │
+└───────────────────┘
+```
+
+### Fraud Detection Flow
+
+**1. Synchronous Scoring (REST)**
+```python
+# Real-time transaction scoring
+fraud_result = fraud_client.score_transaction({
+    "transaction_id": "txn_abc123",
+    "account_id": "acc_xyz789", 
+    "amount": 4500.00,
+    "merchant_id": "merch_456",
+    "location": {"country": "US", "city": "San Francisco"}
+})
+
+# Immediate decision: APPROVE/REVIEW/BLOCK
+if fraud_result.score < 30:
+    action = "APPROVE"    # Low risk - process immediately
+elif fraud_result.score < 70:  
+    action = "REVIEW"     # Medium risk - queue for analyst
+else:
+    action = "BLOCK"      # High risk - reject transaction
+```
+
+**2. Asynchronous Event Streaming (Kafka)**
+```python
+# Publish fraud decision to Kafka
+await fraud_events.publish_fraud_decision({
+    "transaction_id": "txn_abc123",
+    "decision": "approve",
+    "score": 25.5,
+    "risk_factors": ["unusual_time", "new_merchant"],
+    "processing_time_ms": 45
+})
+
+# High-risk alerts trigger immediate notifications
+if fraud_result.score > 70:
+    await fraud_events.publish_fraud_alert({
+        "transaction_id": "txn_abc123",
+        "alert_type": "high_risk_transaction",
+        "requires_immediate_review": True
+    })
+```
+
+### Configuration & Fallback
+
 ```bash
-export NEXUM_BASTION_URL="https://bastion.example.com"
-export NEXUM_BASTION_API_KEY="your-api-key"
-export NEXUM_BASTION_TIMEOUT="5.0"           # Request timeout in seconds
-export NEXUM_BASTION_FALLBACK="approve"      # Fallback action if Bastion unavailable
+# Environment configuration
+NEXUM_BASTION_URL=https://bastion.example.com
+NEXUM_BASTION_API_KEY=your_api_key_here
+NEXUM_BASTION_TIMEOUT=5.0           # Request timeout in seconds
+NEXUM_BASTION_FALLBACK=approve      # Action when Bastion unavailable
 ```
 
-**🎯 Integration Points:**
-- **REST API**: Real-time transaction scoring via `/score` endpoint
-- **Kafka Events**: Asynchronous fraud alerts and decision publishing
-- **Fallback Mode**: Configurable behavior when fraud service is unavailable
-- **Audit Trail**: All fraud decisions logged in hash-chained audit system
+**Fallback Strategy:** When Bastion is unavailable (network timeout, service down), Nexum uses the configured fallback action while logging the event for later analysis. All decisions, including fallbacks, are recorded in the immutable audit trail.
 
-## 🏗️ Architecture
+---
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   REST API      │    │   Workflows     │    │   Reporting     │
-│   112 endpoints │    │   Approval      │    │   Analytics     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Customers     │    │   Compliance    │    │   Custom Fields │
-│   KYC/AML       │    │   Risk Mgmt     │    │   Validation    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Accounts      │    │   Products      │    │   Collections   │
-│   Management    │    │   Configuration │    │   Strategies    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Transactions  │    │   Credit Lines  │    │   Loans         │
-│   Processing    │    │   Statements    │    │   Amortization  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Interest      │    │   Ledger        │    │   Audit Trail   │
-│   Calculations  │    │   Double Entry  │    │   Hash Chain    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Storage       │    │   Currency      │    │   RBAC          │
-│   Abstraction   │    │   Multi-Support │    │   Authorization │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
+## Quick Start
 
-## 🚀 Quick Start
+### Docker Compose (Recommended)
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/AlexShrike/nexum
 cd nexum
 
-# Install dependencies
-poetry install
+# Start full stack (PostgreSQL + Kafka + Nexum + Dashboard)
+docker-compose up -d
 
-# Configure database (optional - defaults to SQLite)
-export NEXUM_DATABASE_URL="postgresql://user:pass@localhost/nexum"
-export NEXUM_JWT_SECRET="your-secret-key-change-in-production"
-
-# Configure encryption for PII data (optional)
-export NEXUM_ENCRYPTION_ENABLED="true"
-export NEXUM_ENCRYPTION_PROVIDER="aesgcm"  # or "fernet"
-export NEXUM_ENCRYPTION_MASTER_KEY="your-256-bit-encryption-master-key"
-
-# Configure multi-tenancy (optional)
-export NEXUM_MULTI_TENANT="true"
-
-# Start the server
-python run.py
-
-# Test the API
+# Verify services
 curl http://localhost:8090/health
 ```
 
-The API will be available at `http://localhost:8090` with interactive docs at `/docs`.
-
-## 📦 Module Overview
-
-| Module | Description | Lines of Code |
-|--------|-------------|---------------|
-| **api.py** | REST API endpoints and Pydantic models | 2,923 |
-| **ledger.py** | Double-entry bookkeeping engine | 551 |
-| **accounts.py** | Account management and chart of accounts | 678 |
-| **customers.py** | Customer profiles and KYC management | 676 |
-| **transactions.py** | Transaction processing and validation | 1,052 |
-| **interest.py** | Interest calculations and accrual | 969 |
-| **credit.py** | Credit line management and statements | 885 |
-| **loans.py** | Loan origination and amortization | 1,236 |
-| **collections.py** | Delinquency management and strategies | 1,156 |
-| **compliance.py** | KYC/AML checks and monitoring | 700 |
-| **workflows.py** | Approval chains and SLA management | 1,010 |
-| **rbac.py** | Role-based access control | 942 |
-| **reporting.py** | Report generation and analytics | 1,329 |
-| **custom_fields.py** | Dynamic field management | 793 |
-| **audit.py** | Hash-chained audit trail | 434 |
-| **currency.py** | Multi-currency support | 265 |
-| **storage.py** | Storage abstraction layer | 358 |
-| **products.py** | Product configuration engine | 692 |
-| **events.py** | Event dispatcher and observer pattern | 412 |
-| **notifications.py** | Multi-channel notification engine | 1,068 |
-| **tenancy.py** | Multi-tenant isolation and management | 495 |
-| **encryption.py** | PII encryption at rest with key rotation | 488 |
-| **__init__.py** | Package initialization | 5 |
-
-## 🔌 API Overview
-
-| Module | Endpoints | Description |
-|--------|-----------|-------------|
-| **Health & Status** | 2 | System health and status checks |
-| **Customers** | 12 | Customer CRUD, KYC management, beneficiaries |
-| **Accounts** | 15 | Account operations, balance queries, holds |
-| **Transactions** | 18 | Deposits, withdrawals, transfers, reversals |
-| **Credit Lines** | 10 | Credit management, statements, payments |
-| **Loans** | 12 | Loan creation, payments, amortization |
-| **Interest** | 8 | Interest calculations and posting |
-| **Collections** | 9 | Delinquency management, strategies |
-| **Compliance** | 6 | KYC checks, AML monitoring |
-| **Workflows** | 8 | Approval chains, task management |
-| **RBAC** | 7 | User management, roles, permissions |
-| **Reporting** | 5 | Report generation, custom reports |
-| **Products** | 4 | Product configuration, templates |
-| **Custom Fields** | 4 | Dynamic field management |
-| **Audit** | 2 | Audit trail queries, integrity checks |
-
-| **Notifications** | 10 | Notification templates, sending, preferences |
-| **Tenancy** | 8 | Multi-tenant management, stats, branding |
-| **Encryption** | 3 | Key management, encryption status, rotation |
-| **Kafka Events** | 6 | Event streaming, consumer management |  
-| **Authentication** | 3 | Login, logout, token refresh |
-
-**Total: 130+ REST endpoints**
-
-## 🛠️ Technology Stack
-
-- **Language**: Python 3.14+
-- **Web Framework**: FastAPI with automatic OpenAPI docs
-- **Database**: PostgreSQL with JSONB + SQLite + In-Memory
-- **Precision**: Decimal arithmetic (never floats for money)  
-- **Security**: JWT authentication + scrypt password hashing
-- **Auditing**: Hash-chained audit trail with integrity verification
-- **Events**: Kafka integration for real-time event streaming
-- **Configuration**: Environment-based config (NEXUS_* variables)
-- **Testing**: Pytest with 514 comprehensive tests
-- **API Documentation**: Auto-generated OpenAPI/Swagger
-
-## 🧪 Testing
-
-Run the complete test suite:
+### Manual Installation
 
 ```bash
-python -m pytest tests/ -v
+# Install with Poetry
+poetry install
+
+# Configure environment
+export NEXUM_DATABASE_URL="postgresql://user:pass@localhost/nexum"
+export NEXUM_JWT_SECRET="your-secret-key-change-in-production"
+export NEXUM_ENCRYPTION_ENABLED="true"
+export NEXUM_ENCRYPTION_MASTER_KEY="your-256-bit-master-key"
+
+# Start server
+python run.py
+
+# API available at http://localhost:8090 with docs at /docs
 ```
 
-**Test Coverage**: 642 tests across 16 test modules covering:
-- Unit tests for all financial calculations
-- Integration tests for complete workflows
-- Edge cases and error conditions
-- Compliance and audit trail validation
+### Environment Variables
 
-## 📁 Project Structure
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEXUM_DATABASE_URL` | PostgreSQL connection string | SQLite fallback |
+| `NEXUM_JWT_SECRET` | JWT signing key (change in production) | auto-generated |
+| `NEXUM_ENCRYPTION_ENABLED` | Enable PII encryption at rest | false |
+| `NEXUM_ENCRYPTION_PROVIDER` | Encryption provider (aesgcm/fernet) | aesgcm |
+| `NEXUM_MULTI_TENANT` | Enable multi-tenancy support | false |
+| `NEXUM_KAFKA_ENABLED` | Enable Kafka event streaming | false |
+| `NEXUM_BASTION_URL` | Bastion fraud detection endpoint | disabled |
+| `NEXUM_RATE_LIMIT` | API rate limit (req/min) | 60 |
 
+---
+
+## API Highlights
+
+Core endpoints with production-ready examples:
+
+```bash
+# Create customer with KYC
+curl -X POST http://localhost:8090/customers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Smith", 
+    "email": "jane@example.com",
+    "phone": "+1-555-0199",
+    "date_of_birth": "1985-03-15"
+  }'
+
+# Open savings account
+curl -X POST http://localhost:8090/accounts \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust_abc123",
+    "product_type": "savings",
+    "currency": "USD", 
+    "interest_rate": "0.025"
+  }'
+
+# Process deposit with fraud check
+curl -X POST http://localhost:8090/transactions/deposit \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": "acc_xyz789",
+    "amount": {"amount": "1000.00", "currency": "USD"},
+    "description": "Initial deposit",
+    "channel": "mobile"
+  }'
+
+# Originate loan with French amortization
+curl -X POST http://localhost:8090/loans \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust_abc123",
+    "terms": {
+      "principal_amount": {"amount": "25000.00", "currency": "USD"},
+      "annual_interest_rate": "0.0649",
+      "term_months": 60,
+      "amortization_method": "equal_installment"
+    }
+  }'
 ```
-nexum/
-├── core_banking/           # Main package (29+ modules)
-│   ├── api.py             # Main API server
-│   ├── api_modular/       # Modular API routers (15 modules)
-│   ├── config.py          # Environment-based configuration
-│   ├── migrations.py      # Database migration system
-│   ├── kafka_integration.py # Event streaming support
-│   ├── logging_config.py  # Structured JSON logging
-│   ├── ledger.py          # Double-entry bookkeeping
-│   ├── accounts.py        # Account management
-│   ├── customers.py       # Customer & KYC
-│   ├── transactions.py    # Transaction processing
-│   ├── interest.py        # Interest calculations
-│   ├── credit.py          # Credit line management
-│   ├── loans.py           # Loan processing
-│   ├── collections.py     # Delinquency management
-│   ├── compliance.py      # KYC/AML compliance
-│   ├── workflows.py       # Approval workflows
-│   ├── rbac.py           # Role-based access control
-│   ├── reporting.py       # Reports & analytics
-│   ├── custom_fields.py   # Dynamic fields
-│   ├── audit.py          # Audit trail
-│   ├── currency.py       # Multi-currency
-│   ├── storage.py        # Storage abstraction
-│   ├── products.py       # Product configuration
-│   ├── events.py         # Event dispatcher (observer pattern)
-│   ├── notifications.py  # Multi-channel notifications
-│   ├── tenancy.py        # Multi-tenant support
-│   ├── encryption.py     # PII encryption at rest
-│   └── event_hooks.py    # Kafka event hooks
-├── tests/                 # Test suite (514 tests)
-│   ├── test_ledger.py    # Ledger tests
-│   ├── test_accounts.py  # Account tests
-│   └── ...               # (16 test modules)
-├── docs/                 # Documentation
-│   ├── architecture.md   # System architecture
-│   ├── getting-started.md # Setup guide
-│   ├── api-reference.md  # API documentation
-│   └── modules/          # Module-specific docs
-└── run.py                # Server startup script
-```
 
-## 🤝 Contributing
+---
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with tests
-4. Ensure all tests pass (`python -m pytest`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+## Dashboard
 
-### Development Guidelines
+Comprehensive **14-page SPA** operations dashboard on port **8890**:
 
-- All monetary calculations must use `decimal.Decimal`
-- Every financial operation requires comprehensive tests
-- Maintain the hash-chained audit trail integrity
-- Follow double-entry accounting principles
-- Document API changes in OpenAPI format
+- **Overview** — Real-time portfolio metrics, transaction volumes, alert summaries
+- **Transactions** — Live transaction feed with fraud scoring and status indicators  
+- **Accounts** — Account management, balance monitoring, holds and freezes
+- **Customers** — Customer profiles, KYC status, relationship mapping
+- **Loans** — Loan portfolio, amortization schedules, payment tracking
+- **Credit Lines** — Credit utilization, statement generation, payment history
+- **Collections** — Delinquency management, collection strategies, recovery tracking
+- **Compliance** — KYC alerts, AML monitoring, regulatory reporting
+- **Fraud Detection** — Bastion integration status, risk scoring analytics
+- **Workflows** — Approval queues, SLA monitoring, task assignments  
+- **Reports** — Financial reporting, custom analytics, data export
+- **Notifications** — Multi-channel messaging, delivery tracking, preferences
+- **Administration** — User management, RBAC configuration, system health
+- **Audit Trail** — Hash-chained audit log with integrity verification
 
-## 📄 License
+**Tech Stack:** Preact + HTM frontend (no build step), FastAPI backend, WebSocket real-time updates
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+---
 
-## 🏢 About
+## Security
 
-**Nexum** — Production-grade financial infrastructure for the modern world.
+### Authentication & Authorization
+- **JWT Authentication** — Bearer tokens with configurable expiry (default 24h)
+- **scrypt Password Hashing** — Replacing legacy SHA-256 with memory-hard scrypt
+- **Role-Based Access Control** — 8 built-in roles, 30+ granular permissions
+- **Rate Limiting** — 60 requests/minute per IP, configurable per endpoint
+- **Session Management** — Secure session handling with logout invalidation
 
-GitHub: [https://github.com/AlexShrike/nexum](https://github.com/AlexShrike/nexum)
+### Data Protection  
+- **PII Encryption at Rest** — Field-level encryption with AES-GCM or Fernet
+- **Master Key Derivation** — PBKDF2-based key derivation with salt rotation
+- **Selective Encryption** — Automatic detection and encryption of PII fields
+- **Key Rotation** — Built-in key rotation with background re-encryption
+- **Multi-Tenant Isolation** — Data separation via tenant-aware encryption keys
+
+### Audit & Compliance
+- **Hash-Chained Audit Trail** — SHA-256 linked immutable journal entries
+- **ACID Transaction Logging** — Every financial operation atomically audited
+- **Integrity Verification** — Tamper-evident audit log with chain validation
+- **Compliance Reporting** — Built-in regulatory reporting and alert generation
+- **Data Retention** — Configurable retention policies with automated archival
+
+---
+
+## Configuration
+
+| Environment Variable | Description | Default Value |
+|---------------------|-------------|---------------|
+| `NEXUM_HOST` | Server bind address | 0.0.0.0 |
+| `NEXUM_PORT` | Server port | 8090 |
+| `NEXUM_DATABASE_URL` | PostgreSQL connection string | sqlite:///nexum.db |
+| `NEXUM_REDIS_URL` | Redis URL for caching | None (disabled) |
+| `NEXUM_JWT_SECRET` | JWT token signing key | auto-generated |
+| `NEXUM_JWT_EXPIRY_HOURS` | Token expiration time | 24 |
+| `NEXUM_LOG_LEVEL` | Logging level | INFO |
+| `NEXUM_ENCRYPTION_ENABLED` | Enable PII encryption | false |
+| `NEXUM_ENCRYPTION_PROVIDER` | Encryption backend | aesgcm |
+| `NEXUM_ENCRYPTION_MASTER_KEY` | 256-bit master encryption key | None |
+| `NEXUM_MULTI_TENANT` | Enable multi-tenancy | false |
+| `NEXUM_KAFKA_ENABLED` | Enable event streaming | false |
+| `NEXUM_KAFKA_BOOTSTRAP_SERVERS` | Kafka broker endpoints | localhost:9092 |
+| `NEXUM_BASTION_URL` | Bastion fraud detection API | None |
+| `NEXUM_BASTION_API_KEY` | Bastion API authentication | None |
+| `NEXUM_BASTION_TIMEOUT` | Fraud API request timeout | 5.0 |
+| `NEXUM_RATE_LIMIT` | API rate limit (req/min) | 60 |
+
+---
+
+## Documentation
+
+- **[Architecture Guide](docs/architecture.md)** — System design, data flow, and module dependencies
+- **[API Reference](docs/api-reference.md)** — Complete REST endpoint documentation  
+- **[Getting Started](docs/getting-started.md)** — Installation, configuration, and first steps
+- **[Deployment Guide](docs/deployment.md)** — Production deployment patterns and scaling
+- **[Security Guide](docs/security.md)** — Authentication, encryption, and compliance features
+- **[Integration Guide](docs/integration.md)** — Kafka events, webhooks, and external system integration
+- **[Developer Guide](docs/development.md)** — Contributing guidelines and development setup
+- **[Migration Guide](docs/migrations.md)** — Database schema changes and upgrade procedures
+
+---
+
+## Technology Stack
+
+**Backend Infrastructure**
+- **Language:** Python 3.14+
+- **Web Framework:** FastAPI with automatic OpenAPI documentation
+- **Database:** PostgreSQL with JSONB + SQLite + InMemory storage options
+- **Message Queue:** Apache Kafka for event streaming and system integration
+- **Authentication:** JWT tokens with scrypt password hashing
+- **Encryption:** AES-GCM and Fernet for PII protection at rest
+
+**Financial Engineering**
+- **Precision:** Decimal arithmetic throughout — no floating-point for money
+- **Accounting:** Double-entry bookkeeping with immutable journal entries  
+- **Audit Trail:** SHA-256 hash-chained audit log for tamper evidence
+- **Compliance:** Built-in KYC/AML monitoring and regulatory reporting
+- **Risk Management:** Real-time fraud detection via Bastion integration
+
+**Operations & DevOps**
+- **Containerization:** Docker and docker-compose for consistent deployments
+- **CI/CD:** GitHub Actions with automated testing and deployment
+- **Monitoring:** Structured JSON logging with correlation IDs
+- **Configuration:** Environment-based configuration management
+- **Testing:** 707+ comprehensive tests with pytest
+
+**Frontend Dashboard**
+- **Framework:** Preact + HTM (no build step required)
+- **Styling:** Modern responsive design with dark/light theme support
+- **Real-time:** WebSocket integration for live updates
+- **Charts:** Interactive financial charts and analytics
+- **Accessibility:** WCAG 2.1 compliant interface design
+
+---
+
+<p align="center">
+  Built by <strong>AlexShrike</strong> • Production-ready core banking infrastructure
+</p>
