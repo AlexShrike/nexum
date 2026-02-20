@@ -567,6 +567,152 @@ flowchart TD
 - **Customer Channels**: Web, mobile, ATM integration
 - **Event Streaming**: Real-time event publishing to downstream systems
 
+## Fraud Detection Integration
+
+Nexum integrates with Bastion, a real-time fraud scoring engine, to provide intelligent transaction monitoring and automated risk assessment.
+
+### Fraud Detection Flow
+
+```mermaid
+flowchart TD
+    TXN[Transaction Created] --> FRAUD_CLIENT[fraud_client.py]
+    FRAUD_CLIENT --> |HTTP POST| BASTION[Bastion /score Endpoint]
+    
+    BASTION --> SCORE_LOW{Score < 30?}
+    BASTION --> SCORE_MED{Score 30-70?}
+    BASTION --> SCORE_HIGH{Score > 70?}
+    
+    SCORE_LOW -->|Yes| APPROVE[APPROVE Decision]
+    SCORE_MED -->|Yes| REVIEW[REVIEW Decision]
+    SCORE_HIGH -->|Yes| BLOCK[BLOCK Decision]
+    
+    APPROVE --> PROCESS[Process Transaction]
+    REVIEW --> QUEUE[Queue for Review]
+    BLOCK --> REJECT[Reject Transaction]
+    
+    APPROVE --> FRAUD_EVENTS[fraud_events.py]
+    REVIEW --> FRAUD_EVENTS
+    BLOCK --> FRAUD_EVENTS
+    
+    FRAUD_EVENTS --> KAFKA_PUB[Publish to Kafka]
+    KAFKA_PUB --> BASTION_DECISIONS[bastion.fraud.decisions]
+    KAFKA_PUB --> BASTION_ALERTS[bastion.fraud.alerts]
+```
+
+### Fraud Client Architecture
+
+```mermaid
+sequenceDiagram
+    participant TXN as Transaction Processor
+    participant FC as fraud_client.py
+    participant BASTION as Bastion API
+    participant FE as fraud_events.py
+    participant KAFKA as Kafka Cluster
+    participant AUDIT as Audit Trail
+
+    TXN->>FC: score_transaction(transaction_data)
+    FC->>BASTION: POST /score {transaction details}
+    
+    alt Bastion Available
+        BASTION-->>FC: {score: 25, risk: "low", decision: "approve"}
+        FC-->>TXN: FraudResult(APPROVE, score=25)
+    else Bastion Timeout/Error
+        FC-->>TXN: FraudResult(fallback_action, score=null)
+    end
+    
+    TXN->>FE: publish_fraud_decision(result)
+    FE->>KAFKA: Publish to bastion.fraud.decisions
+    
+    alt High Risk Score
+        FE->>KAFKA: Publish alert to bastion.fraud.alerts
+    end
+    
+    TXN->>AUDIT: Log fraud decision
+```
+
+### Fraud Data Flow
+
+```python
+# Transaction → Fraud Scoring → Decision Pipeline
+
+@dataclass
+class FraudScoreRequest:
+    transaction_id: str
+    account_id: str
+    amount: Decimal
+    currency: str
+    transaction_type: str
+    timestamp: datetime
+    customer_id: str
+    merchant_info: Optional[Dict[str, Any]]
+    location: Optional[Dict[str, str]]
+
+@dataclass 
+class FraudScoreResponse:
+    transaction_id: str
+    score: float  # 0-100 risk score
+    decision: str  # "approve", "review", "block"  
+    risk_factors: List[str]
+    processing_time_ms: int
+
+# Decision Logic
+if score < 30:
+    action = "APPROVE"  # Low risk - proceed
+elif score < 70:
+    action = "REVIEW"   # Medium risk - manual review
+else:
+    action = "BLOCK"    # High risk - reject transaction
+```
+
+### Kafka Integration Topics
+
+**Topics Consumed by Bastion:**
+- `nexum.transactions` - Real-time transaction stream
+- `nexum.customers` - Customer profile updates
+
+**Topics Published by Nexum (fraud_events.py):**
+- `bastion.fraud.decisions` - Fraud scoring decisions
+- `bastion.fraud.alerts` - High-risk transaction alerts
+
+```json
+// bastion.fraud.decisions topic
+{
+  "transaction_id": "txn_abc123",
+  "decision": "approve",
+  "score": 25.5,
+  "risk_factors": ["unusual_time", "new_merchant"],
+  "processing_time_ms": 45,
+  "timestamp": "2026-02-20T08:45:00Z"
+}
+
+// bastion.fraud.alerts topic  
+{
+  "transaction_id": "txn_def456", 
+  "alert_type": "high_risk_transaction",
+  "score": 85.2,
+  "risk_factors": ["velocity", "location_anomaly", "amount_anomaly"],
+  "customer_id": "cust_789",
+  "requires_immediate_review": true,
+  "timestamp": "2026-02-20T08:46:00Z"
+}
+```
+
+### Configuration & Fallback
+
+**Environment Variables:**
+```bash
+NEXUM_BASTION_URL=https://bastion.example.com
+NEXUM_BASTION_API_KEY=secret_api_key
+NEXUM_BASTION_TIMEOUT=5.0           # Request timeout
+NEXUM_BASTION_FALLBACK=approve      # Fallback when unavailable
+```
+
+**Fallback Strategy:**
+- **Network timeout**: Use configured fallback action (approve/review/block)
+- **Service unavailable**: Log warning, proceed with fallback
+- **Invalid response**: Use fallback and alert operations team
+- **All decisions logged**: Even fallback decisions are audited
+
 ## Deployment Architecture
 
 ### Single Instance Deployment

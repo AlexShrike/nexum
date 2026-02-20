@@ -61,6 +61,40 @@ Nexum includes enterprise-grade infrastructure components for production deploym
 - CloudEvents-compatible message format
 - Async event processing and publishing
 
+## 🛡️ Fraud Detection Integration (Bastion)
+
+Nexum integrates seamlessly with **Bastion**, a real-time fraud scoring engine, to provide intelligent transaction monitoring and risk assessment.
+
+**🔍 Key Components:**
+- **fraud_client.py** - REST client for real-time fraud scoring
+- **fraud_events.py** - Kafka event publishing for fraud alerts
+
+**⚡ Real-time Processing Flow:**
+```
+Transaction → fraud_client.py → Bastion /score → Decision → Action
+    ↓              ↓                ↓           ↓        ↓
+  Created    →  Score API    →    Risk Score  → Rule  → APPROVE/REVIEW/BLOCK
+```
+
+**📋 Decision Flow:**
+- **APPROVE** - Low risk score, transaction proceeds automatically
+- **REVIEW** - Medium risk score, flagged for manual review
+- **BLOCK** - High risk score, transaction blocked immediately
+
+**⚙️ Configuration Variables:**
+```bash
+export NEXUM_BASTION_URL="https://bastion.example.com"
+export NEXUM_BASTION_API_KEY="your-api-key"
+export NEXUM_BASTION_TIMEOUT="5.0"           # Request timeout in seconds
+export NEXUM_BASTION_FALLBACK="approve"      # Fallback action if Bastion unavailable
+```
+
+**🎯 Integration Points:**
+- **REST API**: Real-time transaction scoring via `/score` endpoint
+- **Kafka Events**: Asynchronous fraud alerts and decision publishing
+- **Fallback Mode**: Configurable behavior when fraud service is unavailable
+- **Audit Trail**: All fraud decisions logged in hash-chained audit system
+
 ## 🏗️ Architecture
 
 ```
