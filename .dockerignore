@@ -1,0 +1,9 @@
+__pycache__
+*.pyc
+.git
+.env
+*.db
+tests/
+docs/
+*.md
+.ruff_cache
