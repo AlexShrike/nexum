@@ -418,14 +418,46 @@ Comprehensive **14-page SPA** operations dashboard on port **8890**:
 
 ## Documentation
 
-- **[Architecture Guide](docs/architecture.md)** — System design, data flow, and module dependencies
-- **[API Reference](docs/api-reference.md)** — Complete REST endpoint documentation  
-- **[Getting Started](docs/getting-started.md)** — Installation, configuration, and first steps
-- **[Deployment Guide](docs/deployment.md)** — Production deployment patterns and scaling
-- **[Security Guide](docs/security.md)** — Authentication, encryption, and compliance features
-- **[Integration Guide](docs/integration.md)** — Kafka events, webhooks, and external system integration
-- **[Developer Guide](docs/development.md)** — Contributing guidelines and development setup
-- **[Migration Guide](docs/migrations.md)** — Database schema changes and upgrade procedures
+Comprehensive documentation for developers, operators, and system integrators:
+
+### **Getting Started**
+- **[Getting Started Guide](docs/GETTING_STARTED.md)** (1,337 lines) — Complete installation, configuration, and setup walkthrough
+- **[Quick Start Guide](docs/getting-started.md)** (875 lines) — Fast-track setup for development and testing
+
+### **Architecture & Design**
+- **[Architecture Overview](docs/architecture.md)** (800 lines) — System design, data flow, and module dependencies
+- **[API Reference](docs/api-reference.md)** (1,232 lines) — Complete REST endpoint documentation with examples
+
+### **Operations & Deployment**
+- **[Deployment Guide](docs/DEPLOYMENT.md)** (1,506 lines) — Production deployment patterns, scaling, and infrastructure
+- **[Security Guide](docs/SECURITY.md)** (1,523 lines) — Authentication, encryption, RBAC, and compliance features
+- **[Best Practices](docs/BEST_PRACTICES.md)** (2,902 lines) — Operational guidelines, performance optimization, and troubleshooting
+- **[Cookbook](docs/COOKBOOK.md)** (2,238 lines) — Real-world recipes, common patterns, and integration examples
+
+### **Integration**
+- **[Kafka Integration](docs/KAFKA_INTEGRATION.md)** (297 lines) — Event streaming setup, topics, and message patterns
+- **[Bastion Fraud Detection](https://github.com/AlexShrike/bastion)** — Real-time fraud scoring integration via `fraud_client.py` and `fraud_events.py`
+
+### **Module Reference**
+Complete documentation for all 15 core banking modules:
+
+| Module | Lines | Description |
+|--------|-------|-------------|
+| **[Ledger](docs/modules/ledger.md)** | 615 | Double-entry bookkeeping, journal entries, and balance calculations |
+| **[Loans](docs/modules/loans.md)** | 912 | Loan origination, amortization schedules, and payment processing |
+| **[Credit](docs/modules/credit.md)** | 989 | Credit line management, revolving credit, and statement generation |
+| **[Collections](docs/modules/collections.md)** | 1,037 | Delinquency management, collection strategies, and recovery workflows |
+| **[Compliance](docs/modules/compliance.md)** | 1,369 | KYC/AML monitoring, transaction screening, and regulatory reporting |
+| **[Products](docs/modules/products.md)** | 818 | Banking product configuration, templates, and lifecycle management |
+| **[RBAC](docs/modules/rbac.md)** | 1,618 | Role-based access control, permissions, and user management |
+| **[Workflows](docs/modules/workflows.md)** | 1,166 | Approval chains, SLA management, and process automation |
+| **[Custom Fields](docs/modules/custom-fields.md)** | 1,274 | Dynamic field management and entity extension capabilities |
+| **[Encryption](docs/modules/encryption.md)** | 765 | PII encryption at rest, key rotation, and data protection |
+| **[Events](docs/modules/events.md)** | 433 | Observer pattern implementation and domain event publishing |
+| **[Kafka](docs/modules/kafka.md)** | 542 | Message streaming, topic management, and event processing |
+| **[Notifications](docs/modules/notifications.md)** | 753 | Multi-channel messaging (email, SMS, push, webhook, in-app) |
+| **[Reporting](docs/modules/reporting.md)** | 1,171 | Report generation, analytics, and custom report definitions |
+| **[Tenancy](docs/modules/tenancy.md)** | 792 | Multi-tenant isolation strategies and tenant management |
 
 ---
 
