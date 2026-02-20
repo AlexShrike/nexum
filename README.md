@@ -174,10 +174,10 @@ Comprehensive **14-page SPA** operations dashboard providing complete visibility
 ![Overview Dashboard](screenshots/01_overview.png)
 *Real-time portfolio metrics, transaction volumes, and system health monitoring*
 
-![Customer Management](screenshots/02_customers.png)
+![Customer Management](screenshots/03_customers.png)
 *Customer profiles, KYC status, relationship mapping, and account overview*
 
-![Transaction Processing](screenshots/03_transactions.png)
+![Transaction Processing](screenshots/05_transactions.png)
 *Live transaction feed with fraud scoring, status tracking, and decision audit*
 
 ![Account Management](screenshots/04_accounts.png)
