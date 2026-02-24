@@ -540,6 +540,13 @@
 </head>
 <body>
     <div id="app"></div>
+    <script type="module">
+        import { h, render, Component } from 'preact';
+        import { useState, useEffect, useCallback, useRef, useMemo } from 'preact/hooks';
+        import htm from 'htm';
+        const html = htm.bind(h);
+        window.htmPreact = { html, Component, render, useState, useEffect, useCallback, useRef, useMemo, h };
+    </script>
     <script type="module" src="/static/app.js"></script>
 </body>
 </html>
