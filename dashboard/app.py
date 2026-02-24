@@ -18,6 +18,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from core_banking.storage import SQLiteStorage
 from core_banking.audit import AuditTrail
+
+
+def _customer_name(c: dict) -> str:
+    """Get display name from a customer record."""
+    if not c:
+        return "Unknown"
+    fn = c.get("first_name", "")
+    ln = c.get("last_name", "")
+    full = f"{fn} {ln}".strip()
+    return full or c.get("full_name", "Unknown")
 from core_banking.currency import Currency
 
 app = FastAPI(title="Nexum Core Banking Dashboard", version="1.0")
@@ -172,7 +182,7 @@ async def get_accounts(product_type: Optional[str] = None):
             if account_data.get("customer_id"):
                 customer = storage.load("customers", account_data["customer_id"])
                 if customer:
-                    account_data["customer_name"] = customer.get("name", "Unknown")
+                    account_data["customer_name"] = _customer_name(customer)
         
         return accounts
     except Exception as e:
@@ -259,7 +269,7 @@ async def get_loans(
         for loan_data in loans_data:
             # Get customer info
             customer = storage.load("customers", loan_data.get("customer_id", ""))
-            customer_name = customer.get("name", "Unknown") if customer else "Unknown"
+            customer_name = _customer_name(customer) if customer else "Unknown"
             
             # Extract loan information
             terms = loan_data.get("terms", {})
@@ -326,7 +336,7 @@ async def get_loan_detail(loan_id: str):
         
         return {
             "id": loan_data.get("id", ""),
-            "customer": customer.get("name", "Unknown") if customer else "Unknown",
+            "customer": _customer_name(customer) if customer else "Unknown",
             "terms": {
                 "principal_amount": format_currency_value(terms.get("principal_amount", 0)),
                 "annual_interest_rate": format_currency_value(terms.get("annual_interest_rate", 0)) * 100,
@@ -369,7 +379,7 @@ async def get_credit_lines():
                 "id": account_data.get("id", ""),
                 "account_number": account_data.get("id", "")[:8],
                 "customer_id": account_data.get("customer_id", ""),
-                "customer_name": customer.get("name", "Unknown") if customer else "Unknown",
+                "customer_name": _customer_name(customer) if customer else "Unknown",
                 "limit": credit_limit,
                 "used": balance,
                 "available": available,
@@ -421,7 +431,7 @@ async def get_credit_line_detail(account_id: str):
         
         return {
             "id": account_data.get("id", ""),
-            "customer": customer.get("name", "Unknown") if customer else "Unknown",
+            "customer": _customer_name(customer) if customer else "Unknown",
             "credit_info": {
                 "credit_limit": credit_limit,
                 "current_balance": balance,
@@ -479,7 +489,7 @@ async def get_collection_cases(
                 "id": case_data.get("id", ""),
                 "case_id": case_data.get("id", "")[:8],
                 "customer_id": case_data.get("customer_id", ""),
-                "customer_name": customer.get("name", "Unknown") if customer else "Unknown",
+                "customer_name": _customer_name(customer) if customer else "Unknown",
                 "amount_overdue": format_currency_value(case_data.get("amount_overdue", 0)),
                 "days_past_due": days_past_due,
                 "status": case_data.get("status", "current"),

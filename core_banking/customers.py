@@ -107,6 +107,7 @@ class Customer(StorageRecord):
     first_name: str
     last_name: str
     email: str
+    external_id: Optional[str] = None  # Cross-system ID (e.g. cust_001) — shared with Bastion
     phone: Optional[str] = None
     date_of_birth: Optional[datetime] = None
     address: Optional[Address] = None
@@ -242,7 +243,8 @@ class CustomerManager:
         email: str,
         phone: Optional[str] = None,
         date_of_birth: Optional[datetime] = None,
-        address: Optional[Address] = None
+        address: Optional[Address] = None,
+        external_id: Optional[str] = None
     ) -> Customer:
         """
         Create a new customer
@@ -254,6 +256,7 @@ class CustomerManager:
             phone: Optional phone number
             date_of_birth: Optional date of birth
             address: Optional address
+            external_id: Optional cross-system ID (shared with Bastion)
             
         Returns:
             Created Customer object
@@ -265,6 +268,7 @@ class CustomerManager:
             id=customer_id,
             created_at=now,
             updated_at=now,
+            external_id=external_id,
             first_name=first_name,
             last_name=last_name,
             email=email,

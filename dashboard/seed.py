@@ -23,7 +23,10 @@ import random
 # Add parent to path so core_banking package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core_banking.api_old import banking_system
+# Import shared client data
+from shared_clients import ALL_CLIENTS
+
+from core_banking.api_old import banking_system, BankingSystem
 from core_banking.currency import Money, Currency
 from core_banking.accounts import ProductType
 from core_banking.customers import KYCStatus, KYCTier, Address
@@ -31,55 +34,7 @@ from core_banking.transactions import TransactionType, TransactionChannel
 from core_banking.loans import LoanTerms, PaymentFrequency, AmortizationMethod, LoanState
 from core_banking.credit import TransactionCategory
 
-# Sample data
-FIRST_NAMES = [
-    'James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda',
-    'William', 'Elizabeth', 'David', 'Barbara', 'Richard', 'Susan', 'Joseph', 'Jessica',
-    'Thomas', 'Sarah', 'Christopher', 'Karen', 'Charles', 'Nancy', 'Daniel', 'Lisa',
-    'Matthew', 'Betty', 'Anthony', 'Helen', 'Mark', 'Sandra', 'Donald', 'Donna',
-    'Steven', 'Carol', 'Paul', 'Ruth', 'Andrew', 'Sharon', 'Joshua', 'Michelle',
-    'Kenneth', 'Laura', 'Kevin', 'Sarah', 'Brian', 'Kimberly', 'George', 'Deborah',
-    'Edward', 'Dorothy', 'Ronald', 'Lisa', 'Timothy', 'Nancy', 'Jason', 'Karen',
-    'Jeffrey', 'Betty', 'Ryan', 'Helen', 'Jacob', 'Sandra', 'Gary', 'Donna',
-    'Nicholas', 'Carol', 'Eric', 'Ruth', 'Jonathan', 'Sharon', 'Stephen', 'Michelle',
-    'Larry', 'Laura', 'Justin', 'Sarah', 'Scott', 'Kimberly', 'Brandon', 'Deborah',
-    'Benjamin', 'Dorothy', 'Samuel', 'Lisa', 'Gregory', 'Nancy', 'Frank', 'Karen',
-    'Raymond', 'Betty', 'Alexander', 'Helen', 'Patrick', 'Sandra', 'Jack', 'Donna',
-    'Dennis', 'Carol', 'Jerry', 'Ruth', 'Tyler', 'Sharon', 'Aaron', 'Michelle'
-]
-
-LAST_NAMES = [
-    'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
-    'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson',
-    'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson',
-    'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson', 'Walker',
-    'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill',
-    'Flores', 'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell',
-    'Mitchell', 'Carter', 'Roberts', 'Gomez', 'Phillips', 'Evans', 'Turner', 'Diaz',
-    'Parker', 'Cruz', 'Edwards', 'Collins', 'Reyes', 'Stewart', 'Morris', 'Morales',
-    'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper', 'Peterson',
-    'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
-    'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza'
-]
-
-CITIES = [
-    'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia',
-    'San Antonio', 'San Diego', 'Dallas', 'San Jose', 'Austin', 'Jacksonville',
-    'Fort Worth', 'Columbus', 'Charlotte', 'San Francisco', 'Indianapolis',
-    'Seattle', 'Denver', 'Washington', 'Boston', 'El Paso', 'Nashville',
-    'Detroit', 'Oklahoma City', 'Portland', 'Las Vegas', 'Memphis', 'Louisville',
-    'Baltimore', 'Milwaukee', 'Albuquerque', 'Tucson', 'Fresno', 'Sacramento',
-    'Kansas City', 'Long Beach', 'Mesa', 'Atlanta', 'Colorado Springs', 'Virginia Beach',
-    'Raleigh', 'Omaha', 'Miami', 'Oakland', 'Minneapolis', 'Tulsa', 'Wichita',
-    'New Orleans', 'Arlington'
-]
-
-STATES = [
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
-    'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
-    'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
-    'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
-]
+# Using shared client fixture data from ALL_CLIENTS
 
 TRANSACTION_DESCRIPTIONS = [
     'ATM Withdrawal', 'Online Transfer', 'Direct Deposit', 'Check Deposit',
@@ -95,22 +50,20 @@ def random_date_in_range(start_date, end_date):
     random_days = random.randint(0, delta.days)
     return start_date + timedelta(days=random_days)
 
-def create_customers(system, count=100):
-    """Create demo customers with realistic data"""
-    print(f"Creating {count} customers...")
+def create_customers(system):
+    """Create demo customers using shared client fixtures"""
+    print(f"Creating {len(ALL_CLIENTS)} customers from shared fixtures...")
     customers = []
     
-    for i in range(count):
-        first_name = random.choice(FIRST_NAMES)
-        last_name = random.choice(LAST_NAMES)
+    for i, client_data in enumerate(ALL_CLIENTS):
+        # Split full name into first/last
+        name_parts = client_data["full_name"].split(' ', 1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else "Unknown"
         
-        # Create email based on name
-        email_name = f"{first_name.lower()}.{last_name.lower()}"
-        email_domain = random.choice(['gmail.com', 'yahoo.com', 'outlook.com', 'company.com'])
-        email = f"{email_name}{random.randint(1, 999)}@{email_domain}"
-        
-        # Random phone number
-        phone = f"+1-{random.randint(200, 999)}-{random.randint(200, 999)}-{random.randint(1000, 9999)}"
+        # Use shared client data
+        email = client_data["email"]
+        phone = client_data["phone"]
         
         # Random date of birth (18-80 years old)
         birth_year = random.randint(1943, 2005)
@@ -118,14 +71,19 @@ def create_customers(system, count=100):
         birth_day = random.randint(1, 28)
         date_of_birth = datetime(birth_year, birth_month, birth_day)
         
-        # Random address
+        # Parse address from shared data
+        address_line = client_data["address"]
+        city = client_data["city"]
+        country = client_data["country"]
+        
+        # Create address object
         address = Address(
-            line1=f"{random.randint(100, 9999)} {random.choice(['Main', 'Oak', 'Pine', 'Park', 'First', 'Second', 'Third'])} {random.choice(['St', 'Ave', 'Blvd', 'Dr', 'Way'])}",
-            line2=random.choice([None, None, None, f"Apt {random.randint(1, 200)}", f"Suite {random.randint(100, 999)}"]),
-            city=random.choice(CITIES),
-            state=random.choice(STATES),
+            line1=address_line,
+            line2=None,
+            city=city,
+            state="CA",  # Default state
             postal_code=f"{random.randint(10000, 99999)}",
-            country="US"
+            country=country
         )
         
         try:
@@ -135,17 +93,33 @@ def create_customers(system, count=100):
                 email=email,
                 phone=phone,
                 date_of_birth=date_of_birth,
-                address=address
+                address=address,
+                external_id=client_data["external_id"]
             )
             
-            # Set random KYC status
-            kyc_statuses = list(KYCStatus)
-            kyc_weights = [10, 20, 60, 5, 5]  # More verified customers
-            kyc_status = random.choices(kyc_statuses, weights=kyc_weights)[0]
+            # Map risk_rating to KYC status
+            risk_rating = client_data["risk_rating"]
+            kyc_level = client_data["kyc_level"]
+            
+            # Map risk to KYC status
+            if risk_rating == "low":
+                kyc_status = KYCStatus.VERIFIED if kyc_level in ["full", "enhanced"] else KYCStatus.PENDING
+            elif risk_rating == "medium":
+                kyc_status = KYCStatus.VERIFIED if kyc_level == "enhanced" else KYCStatus.PENDING
+            elif risk_rating == "high":
+                kyc_status = KYCStatus.PENDING if kyc_level == "enhanced" else KYCStatus.REJECTED
+            else:  # critical
+                kyc_status = KYCStatus.REJECTED
             
             if kyc_status != KYCStatus.NONE:
-                kyc_tiers = list(KYCTier)
-                kyc_tier = random.choice(kyc_tiers)
+                # Map kyc_level to tier
+                if kyc_level == "full":
+                    kyc_tier = KYCTier.TIER_3  # Full KYC
+                elif kyc_level == "enhanced":
+                    kyc_tier = KYCTier.TIER_2  # Enhanced KYC
+                else:  # basic
+                    kyc_tier = KYCTier.TIER_1  # Basic KYC
+                    
                 documents = ['passport', 'driver_license', 'utility_bill']
                 
                 system.customer_manager.update_kyc_status(
@@ -159,7 +133,7 @@ def create_customers(system, count=100):
             customers.append(customer)
             
         except Exception as e:
-            print(f"Error creating customer {i}: {e}")
+            print(f"Error creating customer {i} ({client_data['external_id']}): {e}")
             continue
     
     print(f"Created {len(customers)} customers successfully")
@@ -292,11 +266,12 @@ def main():
     print("🏦 Nexum Core Banking - Seed Data Generator")
     print("=" * 50)
     
-    system = banking_system
+    # Initialize the banking system manually for seeding
+    system = BankingSystem(use_sqlite=True)
     
     try:
-        # Create customers
-        customers = create_customers(system, 100)
+        # Create customers using shared fixtures
+        customers = create_customers(system)
         
         if not customers:
             print("❌ No customers created, aborting seed process")
